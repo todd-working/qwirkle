@@ -1,27 +1,27 @@
 // Board component - displays the game board with tiles and drop zones
 
+import { useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { Tile, EmptyCell } from './Tile';
-import type { BoardData, TileData, Position } from '../types/game';
+import type { BoardData, TileData } from '../types/game';
+
+interface PendingPlacement {
+  tile: TileData;
+  index: number;
+}
 
 interface BoardProps {
   board: BoardData;
-  pendingPlacements: Map<string, { tile: TileData; index: number }>;
+  pendingPlacements: Map<string, PendingPlacement>;
   lastMovePositions: number[][];
-  draggingTile?: TileData;  // The tile currently being dragged
-  hintPositions?: { row: number; col: number }[];  // Positions to highlight as hints
+  draggingTile?: TileData;
+  hintPositions?: { row: number; col: number }[];
 }
 
-// Parse "row,col" key to Position
-function parseKey(key: string): Position {
-  const [row, col] = key.split(',').map(Number);
-  return { row, col };
-}
-
-// Get board bounds with padding
+// Get board bounds with padding for drop zones
 function getBounds(
   board: BoardData,
-  pending: Map<string, unknown>
+  pending: Map<string, PendingPlacement>
 ): { minRow: number; maxRow: number; minCol: number; maxCol: number } {
   const keys = [...Object.keys(board), ...pending.keys()];
 
@@ -34,7 +34,7 @@ function getBounds(
   let minCol = Infinity, maxCol = -Infinity;
 
   for (const key of keys) {
-    const { row, col } = parseKey(key);
+    const [row, col] = key.split(',').map(Number);
     minRow = Math.min(minRow, row);
     maxRow = Math.max(maxRow, row);
     minCol = Math.min(minCol, col);
@@ -92,7 +92,7 @@ function getLine(
   col: number,
   direction: 'horizontal' | 'vertical',
   board: BoardData,
-  pending: Map<string, { tile: TileData; index: number }>
+  pending: Map<string, PendingPlacement>
 ): TileData[] {
   const tiles: TileData[] = [];
   const dr = direction === 'vertical' ? 1 : 0;
@@ -142,7 +142,7 @@ function isValidPlacement(
   row: number,
   col: number,
   board: BoardData,
-  pending: Map<string, { tile: TileData; index: number }>
+  pending: Map<string, PendingPlacement>
 ): boolean {
   // Get horizontal and vertical lines
   const hLine = getLine(row, col, 'horizontal', board, pending);
@@ -186,7 +186,7 @@ function isValidLine(tiles: TileData[]): boolean {
 // Get valid drop positions based on current state and the tile being dragged
 function getValidDropPositions(
   board: BoardData,
-  pending: Map<string, { tile: TileData; index: number }>,
+  pending: Map<string, PendingPlacement>,
   draggingTile?: TileData
 ): Set<string> {
   const validPositions = new Set<string>();
@@ -223,20 +223,24 @@ function getValidDropPositions(
       const minCol = Math.min(...cols);
       const maxCol = Math.max(...cols);
 
-      // Check left extension
-      for (let c = minCol - 1; c >= minCol - 5; c--) {
-        const key = `${row},${c}`;
-        if (board[key] || pending.has(key)) break;
-        candidates.add(key);
-        break;
+      // Check left extension (adjacent empty cell)
+      const leftKey = `${row},${minCol - 1}`;
+      if (!board[leftKey] && !pending.has(leftKey)) {
+        candidates.add(leftKey);
       }
 
-      // Check right extension
-      for (let c = maxCol + 1; c <= maxCol + 5; c++) {
-        const key = `${row},${c}`;
-        if (board[key] || pending.has(key)) break;
-        candidates.add(key);
-        break;
+      // Check right extension (adjacent empty cell)
+      const rightKey = `${row},${maxCol + 1}`;
+      if (!board[rightKey] && !pending.has(rightKey)) {
+        candidates.add(rightKey);
+      }
+
+      // Check for gaps between pending tiles that can be filled
+      for (let c = minCol + 1; c < maxCol; c++) {
+        const gapKey = `${row},${c}`;
+        if (!board[gapKey] && !pending.has(gapKey)) {
+          candidates.add(gapKey);
+        }
       }
     }
 
@@ -246,18 +250,24 @@ function getValidDropPositions(
       const minRow = Math.min(...rows);
       const maxRow = Math.max(...rows);
 
-      for (let r = minRow - 1; r >= minRow - 5; r--) {
-        const key = `${r},${col}`;
-        if (board[key] || pending.has(key)) break;
-        candidates.add(key);
-        break;
+      // Check top extension (adjacent empty cell)
+      const topKey = `${minRow - 1},${col}`;
+      if (!board[topKey] && !pending.has(topKey)) {
+        candidates.add(topKey);
       }
 
-      for (let r = maxRow + 1; r <= maxRow + 5; r++) {
-        const key = `${r},${col}`;
-        if (board[key] || pending.has(key)) break;
-        candidates.add(key);
-        break;
+      // Check bottom extension (adjacent empty cell)
+      const bottomKey = `${maxRow + 1},${col}`;
+      if (!board[bottomKey] && !pending.has(bottomKey)) {
+        candidates.add(bottomKey);
+      }
+
+      // Check for gaps between pending tiles that can be filled
+      for (let r = minRow + 1; r < maxRow; r++) {
+        const gapKey = `${r},${col}`;
+        if (!board[gapKey] && !pending.has(gapKey)) {
+          candidates.add(gapKey);
+        }
       }
     }
   } else {
@@ -296,10 +306,26 @@ export function Board({
   draggingTile,
   hintPositions = [],
 }: BoardProps) {
-  const bounds = getBounds(board, pendingPlacements);
-  const lastMoveSet = new Set(lastMovePositions.map(([r, c]) => `${r},${c}`));
-  const validPositions = getValidDropPositions(board, pendingPlacements, draggingTile);
-  const hintSet = new Set(hintPositions.map(p => `${p.row},${p.col}`));
+  // Memoize expensive calculations
+  const bounds = useMemo(
+    () => getBounds(board, pendingPlacements),
+    [board, pendingPlacements]
+  );
+
+  const lastMoveSet = useMemo(
+    () => new Set(lastMovePositions.map(([r, c]) => `${r},${c}`)),
+    [lastMovePositions]
+  );
+
+  const validPositions = useMemo(
+    () => getValidDropPositions(board, pendingPlacements, draggingTile),
+    [board, pendingPlacements, draggingTile]
+  );
+
+  const hintSet = useMemo(
+    () => new Set(hintPositions.map(p => `${p.row},${p.col}`)),
+    [hintPositions]
+  );
 
   // Build grid
   const rows: React.ReactNode[] = [];
@@ -352,12 +378,11 @@ export function Board({
     );
   }
 
-  // Show drop zones on empty cells adjacent to tiles
-  const boardHasTiles = Object.keys(board).length > 0;
+  const isEmpty = Object.keys(board).length === 0;
 
   return (
     <div className="overflow-auto p-4 rounded-xl shadow-inner bg-gray-200">
-      {!boardHasTiles && (
+      {isEmpty && (
         <div className="text-center mb-2 text-blue-700 font-bold">
           Drop your first tile in the center!
         </div>
