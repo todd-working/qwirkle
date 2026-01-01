@@ -350,6 +350,9 @@ export function Board({
     [animatingTiles]
   );
 
+  // Check if we have animating tiles (need overflow visible)
+  const hasAnimating = animatingTiles.length > 0;
+
   // Build grid
   const rows: React.ReactNode[] = [];
 
@@ -369,11 +372,11 @@ export function Board({
       // Check for animating tile first (AI move animation)
       if (animating) {
         // Animating tile - show with slide-in animation
-        const delay = animating.index * 300; // Stagger by 300ms per tile
+        const delay = animating.index * 400; // Stagger by 400ms per tile
         cells.push(
           <div
             key={key}
-            className={`${BOARD_CELL_SIZE} animate-tile-appear`}
+            className={`${BOARD_CELL_SIZE} animate-tile-appear overflow-visible`}
             style={{ animationDelay: `${delay}ms` }}
           >
             <Tile tile={animating.tile} isHighlighted />
@@ -409,7 +412,7 @@ export function Board({
     }
 
     rows.push(
-      <div key={row} className="flex">
+      <div key={row} className={`flex ${hasAnimating ? 'overflow-visible' : ''}`}>
         {cells}
       </div>
     );
@@ -418,13 +421,13 @@ export function Board({
   const isEmpty = Object.keys(board).length === 0;
 
   return (
-    <div className="rounded-xl shadow-inner bg-gray-200 p-4">
+    <div className={`rounded-xl shadow-inner bg-gray-200 p-4 ${hasAnimating ? 'overflow-visible' : ''}`}>
       {isEmpty && (
         <div className="text-center mb-2 text-blue-700 font-bold">
           Drop your first tile in the center!
         </div>
       )}
-      <div className="inline-block min-w-fit">
+      <div className={`inline-block min-w-fit ${hasAnimating ? 'overflow-visible' : ''}`}>
         {rows}
       </div>
     </div>

@@ -9,23 +9,26 @@ body {
   min-height: 100vh;
 }
 
-/* AI tile placement animation */
-@keyframes tile-appear {
+/* AI tile placement animation - slide from left side of screen */
+@keyframes tile-slide-in {
   0% {
     opacity: 0;
-    transform: scale(0.3) translateY(-20px);
+    transform: translateX(-600px) scale(0.8);
   }
-  50% {
+  60% {
     opacity: 1;
-    transform: scale(1.1) translateY(0);
+    transform: translateX(20px) scale(1.1);
+  }
+  80% {
+    transform: translateX(-5px) scale(1);
   }
   100% {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: translateX(0) scale(1);
   }
 }
 
 .animate-tile-appear {
-  animation: tile-appear 0.3s ease-out forwards;
+  animation: tile-slide-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
   opacity: 0;
 }

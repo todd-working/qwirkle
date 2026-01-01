@@ -309,8 +309,9 @@ export function useGame(): UseGameReturn {
             setAnimatingTiles(tilesToAnimate);
 
             // Animate tiles sequentially, then update state
-            const animationDuration = 300; // ms per tile
-            const totalDuration = tilesToAnimate.length * animationDuration;
+            const animationDuration = 600; // ms per tile (matches CSS)
+            const staggerDelay = 400; // ms between tiles
+            const totalDuration = animationDuration + (tilesToAnimate.length - 1) * staggerDelay;
 
             // After animation completes, update the state
             setTimeout(() => {
