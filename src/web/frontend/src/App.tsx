@@ -1,13 +1,14 @@
 // Main Qwirkle App component
 
 import { useState, useMemo } from 'react';
-import { DndContext } from '@dnd-kit/core';
+import { DndContext, DragOverlay } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { useGame } from './hooks/useGame';
 import { Board } from './components/Board';
 import { Hand } from './components/Hand';
 import { Sidebar } from './components/Sidebar';
 import { MiniMap } from './components/MiniMap';
+import { TileDisplay } from './components/Tile';
 import { calculatePendingScore } from './utils/scoring';
 import type { TileData } from './types/game';
 
@@ -264,6 +265,12 @@ function App() {
           </div>
         </div>
       </div>
+      {/* Drag overlay - renders dragged tile smoothly */}
+      <DragOverlay dropAnimation={null}>
+        {draggingTile ? (
+          <TileDisplay tile={draggingTile} size="lg" isDragOverlay />
+        ) : null}
+      </DragOverlay>
     </DndContext>
   );
 }

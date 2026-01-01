@@ -1,7 +1,6 @@
 // Tile component with SVG shapes for Qwirkle
 
 import { useDraggable } from '@dnd-kit/core';
-import { CSS } from '@dnd-kit/utilities';
 import type { TileData } from '../types/game';
 import { COLORS } from '../types/game';
 
@@ -47,6 +46,55 @@ const sizeClasses = {
   lg: 'w-16 h-16',
 };
 
+// Pure display component (used in DragOverlay)
+export function TileDisplay({
+  tile,
+  size = 'md',
+  isGhost = false,
+  isHighlighted = false,
+  isDragOverlay = false,
+}: {
+  tile: TileData;
+  size?: 'sm' | 'md' | 'lg';
+  isGhost?: boolean;
+  isHighlighted?: boolean;
+  isDragOverlay?: boolean;
+}) {
+  const color = COLORS[tile.color].hex;
+  const shape = ShapeSVG[tile.shape];
+
+  const baseClasses = `
+    ${sizeClasses[size]}
+    rounded-lg
+    flex items-center justify-center
+    ${isGhost ? 'opacity-60 ring-2 ring-blue-400' : ''}
+    ${isHighlighted ? 'ring-2 ring-yellow-400 ring-offset-2' : ''}
+    ${isDragOverlay ? 'scale-110 shadow-2xl ring-4 ring-blue-500 cursor-grabbing' : ''}
+  `;
+
+  return (
+    <div className={baseClasses}>
+      <svg
+        viewBox="0 0 40 40"
+        className="w-full h-full"
+        style={{ fill: color, stroke: '#1f2937', strokeWidth: 1.5 }}
+      >
+        <rect
+          x="2"
+          y="2"
+          width="36"
+          height="36"
+          rx="4"
+          fill="#f3f4f6"
+          stroke="#d1d5db"
+          strokeWidth="1"
+        />
+        {shape}
+      </svg>
+    </div>
+  );
+}
+
 export function Tile({
   tile,
   index,
@@ -59,18 +107,16 @@ export function Tile({
   const shape = ShapeSVG[tile.shape];
 
   // Draggable setup (only if index provided)
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `tile-${index}`,
     data: { tile, index },
     disabled: !isDraggable || index === undefined,
   });
 
-  const style = transform
-    ? {
-        transform: CSS.Translate.toString(transform),
-        zIndex: isDragging ? 1000 : undefined,
-      }
-    : undefined;
+  // Style for draggable - no transform here, DragOverlay handles visual
+  const style: React.CSSProperties = {
+    touchAction: 'none', // Prevent browser touch handling
+  };
 
   const baseClasses = `
     ${sizeClasses[size]}
@@ -79,8 +125,8 @@ export function Tile({
     transition-all duration-150
     ${isGhost ? 'opacity-60 ring-2 ring-blue-400' : ''}
     ${isHighlighted ? 'ring-2 ring-yellow-400 ring-offset-2' : ''}
-    ${isDragging ? 'opacity-90 scale-125 shadow-2xl ring-4 ring-blue-500 z-50' : ''}
-    ${isDraggable && !isDragging ? 'cursor-grab hover:scale-110 hover:shadow-xl hover:-translate-y-1 active:cursor-grabbing' : ''}
+    ${isDragging ? 'opacity-30' : ''}
+    ${isDraggable && !isDragging ? 'cursor-grab hover:scale-110 hover:shadow-xl hover:-translate-y-1' : ''}
   `;
 
   return (
