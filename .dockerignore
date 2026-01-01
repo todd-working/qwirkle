@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.venv
+venv
+env
+*.egg-info
+.eggs
+dist
+build
+.pytest_cache
+.coverage
+htmlcov
+.mypy_cache
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.docker
+
+# Docs
+*.md
+docs/
+
+# Tests (optional - include if needed)
+# tests/
+
+# Frontend (built separately)
+src/web/frontend/node_modules
+src/web/frontend/dist
+src/web/frontend/.vite
+
+# Misc
+.DS_Store
+*.log
+.env
+.env.*

@@ -1,0 +1,55 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: qwirkle-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./src/web/frontend
+      dockerfile: Dockerfile
+    container_name: qwirkle-frontend
+    ports:
+      - "3005:80"
+    depends_on:
+      - backend
+
+# For development with hot reload
+  backend-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: qwirkle-backend-dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src:ro
+    command: uvicorn src.web.api:app --host 0.0.0.0 --port 8000 --reload
+    profiles:
+      - dev
+
+  frontend-dev:
+    image: node:20-alpine
+    container_name: qwirkle-frontend-dev
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./src/web/frontend:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - backend-dev
+    profiles:
+      - dev
