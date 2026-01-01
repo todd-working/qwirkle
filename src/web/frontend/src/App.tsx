@@ -18,6 +18,7 @@ function App() {
     isLoading,
     error,
     hintMessage,
+    hintPlacements,
     isAiVsAi,
     startGame,
     dropTile,
@@ -26,6 +27,7 @@ function App() {
     swapSelected,
     undo,
     getHint,
+    clearHint,
     stepAi,
   } = useGame();
 
@@ -44,6 +46,8 @@ function App() {
   const handleDragStart = (event: DragStartEvent) => {
     if (event.active.data.current) {
       setDraggingTile(event.active.data.current.tile as TileData);
+      // Clear any hint highlighting when user starts dragging
+      clearHint();
     }
   };
 
@@ -167,6 +171,7 @@ function App() {
                   pendingPlacements={pendingPlacements}
                   lastMovePositions={state.last_move_positions}
                   draggingTile={draggingTile}
+                  hintPositions={hintPlacements}
                 />
 
                 {/* Mini-map overlay */}

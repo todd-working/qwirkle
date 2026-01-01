@@ -19,6 +19,7 @@ interface UseGameReturn {
   isLoading: boolean;
   error: string | null;
   hintMessage: string | null;
+  hintPlacements: Placement[];
   isAiVsAi: boolean;
 
   // Actions
@@ -31,6 +32,7 @@ interface UseGameReturn {
   swapSelected: () => Promise<void>;
   undo: () => Promise<void>;
   getHint: () => Promise<void>;
+  clearHint: () => void;
   stepAi: () => Promise<void>;
 }
 
@@ -43,6 +45,7 @@ export function useGame(): UseGameReturn {
   const [isLoading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hintMessage, setHintMessage] = useState<string | null>(null);
+  const [hintPlacements, setHintPlacements] = useState<Placement[]>([]);
   const [isAiVsAi, setIsAiVsAi] = useState(false);
 
   // Start a new game
@@ -236,8 +239,12 @@ export function useGame(): UseGameReturn {
       setHintMessage(response.message);
 
       if (response.has_move && response.placements.length > 0) {
+        // Store hint placements for board highlighting
+        setHintPlacements(response.placements);
         // Highlight first placement's tile
         setSelected(response.placements[0].tile_index);
+      } else {
+        setHintPlacements([]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to get hint');
@@ -245,6 +252,12 @@ export function useGame(): UseGameReturn {
       setLoading(false);
     }
   }, [gameId]);
+
+  // Clear hint highlighting
+  const clearHint = useCallback(() => {
+    setHintMessage(null);
+    setHintPlacements([]);
+  }, []);
 
   // Step AI (for AI vs AI mode)
   const stepAi = useCallback(async () => {
@@ -277,6 +290,7 @@ export function useGame(): UseGameReturn {
     isLoading,
     error,
     hintMessage,
+    hintPlacements,
     isAiVsAi,
     startGame,
     selectTile,
@@ -287,6 +301,7 @@ export function useGame(): UseGameReturn {
     swapSelected,
     undo,
     getHint,
+    clearHint,
     stepAi,
   };
 }

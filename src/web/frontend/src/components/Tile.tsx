@@ -123,10 +123,30 @@ export function Tile({
 export function EmptyCell({
   isValidTarget = false,
   isHovered = false,
+  isHint = false,
 }: {
   isValidTarget?: boolean;
   isHovered?: boolean;
+  isHint?: boolean;
 }) {
+  // Hint cells (blue pulsing)
+  if (isHint) {
+    return (
+      <div
+        className={`
+          w-12 h-12 rounded-lg border-3 border-solid
+          flex items-center justify-center
+          cursor-pointer
+          transition-all duration-150
+          bg-blue-400 border-blue-600 animate-pulse shadow-lg
+        `}
+      >
+        <span className="text-blue-900 font-bold text-lg">?</span>
+      </div>
+    );
+  }
+
+  // Valid drop target (green)
   if (isValidTarget) {
     return (
       <div

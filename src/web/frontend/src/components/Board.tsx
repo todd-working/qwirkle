@@ -9,6 +9,7 @@ interface BoardProps {
   pendingPlacements: Map<string, { tile: TileData; index: number }>;
   lastMovePositions: number[][];
   draggingTile?: TileData;  // The tile currently being dragged
+  hintPositions?: { row: number; col: number }[];  // Positions to highlight as hints
 }
 
 // Parse "row,col" key to Position
@@ -54,11 +55,13 @@ function DroppableCell({
   row,
   col,
   isValid,
+  isHint,
   children,
 }: {
   row: number;
   col: number;
   isValid: boolean;
+  isHint?: boolean;
   children?: React.ReactNode;
 }) {
   const id = `cell-${row}-${col}`;
@@ -76,6 +79,7 @@ function DroppableCell({
         <EmptyCell
           isValidTarget={isValid}
           isHovered={isOver && isValid}
+          isHint={isHint}
         />
       )}
     </div>
@@ -290,10 +294,12 @@ export function Board({
   pendingPlacements,
   lastMovePositions,
   draggingTile,
+  hintPositions = [],
 }: BoardProps) {
   const bounds = getBounds(board, pendingPlacements);
   const lastMoveSet = new Set(lastMovePositions.map(([r, c]) => `${r},${c}`));
   const validPositions = getValidDropPositions(board, pendingPlacements, draggingTile);
+  const hintSet = new Set(hintPositions.map(p => `${p.row},${p.col}`));
 
   // Build grid
   const rows: React.ReactNode[] = [];
@@ -325,13 +331,15 @@ export function Board({
           </div>
         );
       } else {
-        // Empty cell (potential drop zone)
+        // Empty cell (potential drop zone or hint)
+        const isHint = hintSet.has(key);
         cells.push(
           <DroppableCell
             key={key}
             row={row}
             col={col}
             isValid={isDropZone}
+            isHint={isHint}
           />
         );
       }
