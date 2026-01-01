@@ -1,0 +1,12 @@
+# ML dependencies for Qwirkle training
+# Uncomment as needed
+
+# Apple MLX (Metal GPU acceleration)
+# mlx>=0.5.0
+
+# PyTorch with MPS support (alternative to MLX)
+# torch>=2.0.0
+
+# Data handling
+# numpy>=1.24.0
+# pandas>=2.0.0

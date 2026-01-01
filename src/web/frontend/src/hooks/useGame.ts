@@ -9,6 +9,16 @@ interface PendingPlacement {
   index: number;  // 1-based hand index
 }
 
+// Game mode types
+export type GameMode = 'beginner' | 'normal';
+
+// Animation state for AI moves
+export interface AnimatingTile {
+  row: number;
+  col: number;
+  tile: TileData;
+}
+
 interface UseGameReturn {
   // State
   gameId: string | null;
@@ -21,9 +31,12 @@ interface UseGameReturn {
   hintMessage: string | null;
   hintPlacements: Placement[];
   isAiVsAi: boolean;
+  gameMode: GameMode;
+  animatingTiles: AnimatingTile[];  // Tiles currently animating onto board
+  isAnimating: boolean;
 
   // Actions
-  startGame: (vsAI?: boolean, aiStrategy?: 'greedy' | 'random', aiVsAi?: boolean) => Promise<void>;
+  startGame: (vsAI?: boolean, aiStrategy?: 'greedy' | 'random', aiVsAi?: boolean, mode?: GameMode) => Promise<void>;
   selectTile: (index: number) => void;
   placeTile: (row: number, col: number) => void;
   dropTile: (tileIndex: number, row: number, col: number) => void;
@@ -47,9 +60,17 @@ export function useGame(): UseGameReturn {
   const [hintMessage, setHintMessage] = useState<string | null>(null);
   const [hintPlacements, setHintPlacements] = useState<Placement[]>([]);
   const [isAiVsAi, setIsAiVsAi] = useState(false);
+  const [gameMode, setGameMode] = useState<GameMode>('beginner');
+  const [animatingTiles, setAnimatingTiles] = useState<AnimatingTile[]>([]);
+  const [isAnimating, setIsAnimating] = useState(false);
 
   // Start a new game
-  const startGame = useCallback(async (vsAI = false, aiStrategy: 'greedy' | 'random' = 'greedy', aiVsAi = false) => {
+  const startGame = useCallback(async (
+    vsAI = false,
+    aiStrategy: 'greedy' | 'random' = 'greedy',
+    aiVsAi = false,
+    mode: GameMode = 'beginner'
+  ) => {
     setLoading(true);
     setError(null);
     try {
@@ -61,6 +82,7 @@ export function useGame(): UseGameReturn {
       setValidPositions(new Set());
       setHintMessage(null);
       setIsAiVsAi(aiVsAi);
+      setGameMode(mode);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to start game');
     } finally {
@@ -259,9 +281,9 @@ export function useGame(): UseGameReturn {
     setHintPlacements([]);
   }, []);
 
-  // Step AI (for AI vs AI mode)
+  // Step AI (for AI vs AI mode) - with animation
   const stepAi = useCallback(async () => {
-    if (!gameId) return;
+    if (!gameId || !state) return;
 
     setLoading(true);
     setError(null);
@@ -270,16 +292,51 @@ export function useGame(): UseGameReturn {
       const response = await api.aiStep(gameId);
 
       if (response.success && response.state) {
-        setState(response.state);
+        const newState = response.state;
+        const lastMovePositions = newState.last_move_positions;
+
+        // If AI placed tiles, animate them
+        if (lastMovePositions && lastMovePositions.length > 0) {
+          // Get the tiles at those positions from the new board
+          const tilesToAnimate: AnimatingTile[] = lastMovePositions.map(([row, col]) => {
+            const key = `${row},${col}`;
+            const tile = newState.board[key];
+            return { row, col, tile };
+          }).filter(t => t.tile); // Filter out any missing tiles
+
+          if (tilesToAnimate.length > 0) {
+            setIsAnimating(true);
+            setAnimatingTiles(tilesToAnimate);
+
+            // Animate tiles sequentially, then update state
+            const animationDuration = 300; // ms per tile
+            const totalDuration = tilesToAnimate.length * animationDuration;
+
+            // After animation completes, update the state
+            setTimeout(() => {
+              setAnimatingTiles([]);
+              setIsAnimating(false);
+              setState(newState);
+              setLoading(false);
+            }, totalDuration);
+
+            return; // Don't setLoading(false) yet
+          }
+        }
+
+        // No animation needed, just update state
+        setState(newState);
       } else {
         setError(response.error || 'AI move failed');
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to step AI');
     } finally {
-      setLoading(false);
+      if (!isAnimating) {
+        setLoading(false);
+      }
     }
-  }, [gameId]);
+  }, [gameId, state, isAnimating]);
 
   return {
     gameId,
@@ -292,6 +349,9 @@ export function useGame(): UseGameReturn {
     hintMessage,
     hintPlacements,
     isAiVsAi,
+    gameMode,
+    animatingTiles,
+    isAnimating,
     startGame,
     selectTile,
     placeTile,

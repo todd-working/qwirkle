@@ -43,6 +43,8 @@ export interface PlayResponse {
   qwirkles?: number;
   error?: string;
   state?: GameState;
+  // For AI moves, we include the tiles placed for animation
+  ai_placements?: Array<{ row: number; col: number; tile: TileData }>;
 }
 
 export interface SwapResponse {

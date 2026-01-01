@@ -2,12 +2,20 @@
 
 import { useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
-import { Tile, EmptyCell } from './Tile';
+import { Tile, EmptyCell, BOARD_CELL_SIZE } from './Tile';
 import type { BoardData, TileData } from '../types/game';
 
 interface PendingPlacement {
   tile: TileData;
   index: number;
+}
+
+type GameMode = 'beginner' | 'normal';
+
+interface AnimatingTile {
+  row: number;
+  col: number;
+  tile: TileData;
 }
 
 interface BoardProps {
@@ -16,6 +24,8 @@ interface BoardProps {
   lastMovePositions: number[][];
   draggingTile?: TileData;
   hintPositions?: { row: number; col: number }[];
+  gameMode?: GameMode;
+  animatingTiles?: AnimatingTile[];
 }
 
 // Get board bounds with padding for drop zones
@@ -73,7 +83,7 @@ function DroppableCell({
   return (
     <div
       ref={setNodeRef}
-      className="w-12 h-12"
+      className={BOARD_CELL_SIZE}
     >
       {children || (
         <EmptyCell
@@ -305,7 +315,12 @@ export function Board({
   lastMovePositions,
   draggingTile,
   hintPositions = [],
+  gameMode = 'beginner',
+  animatingTiles = [],
 }: BoardProps) {
+  // Beginner mode shows valid positions while dragging
+  const showValidPositions = gameMode === 'beginner';
+
   // Memoize expensive calculations
   const bounds = useMemo(
     () => getBounds(board, pendingPlacements),
@@ -317,14 +332,22 @@ export function Board({
     [lastMovePositions]
   );
 
+  // Only calculate valid positions in beginner mode
   const validPositions = useMemo(
-    () => getValidDropPositions(board, pendingPlacements, draggingTile),
-    [board, pendingPlacements, draggingTile]
+    () => showValidPositions ? getValidDropPositions(board, pendingPlacements, draggingTile) : new Set<string>(),
+    [board, pendingPlacements, draggingTile, showValidPositions]
   );
 
+  // Only show hints in beginner mode
   const hintSet = useMemo(
-    () => new Set(hintPositions.map(p => `${p.row},${p.col}`)),
-    [hintPositions]
+    () => showValidPositions ? new Set(hintPositions.map(p => `${p.row},${p.col}`)) : new Set<string>(),
+    [hintPositions, showValidPositions]
+  );
+
+  // Create a map of animating tiles for quick lookup
+  const animatingSet = useMemo(
+    () => new Map(animatingTiles.map((t, i) => [`${t.row},${t.col}`, { tile: t.tile, index: i }])),
+    [animatingTiles]
   );
 
   // Build grid
@@ -338,21 +361,35 @@ export function Board({
       const tile = board[key];
       const pending = pendingPlacements.get(key);
       const isLastMove = lastMoveSet.has(key);
+      const animating = animatingSet.get(key);
 
       // Show as valid drop zone based on game rules
       const isDropZone = validPositions.has(key);
 
-      if (tile) {
+      // Check for animating tile first (AI move animation)
+      if (animating) {
+        // Animating tile - show with slide-in animation
+        const delay = animating.index * 300; // Stagger by 300ms per tile
+        cells.push(
+          <div
+            key={key}
+            className={`${BOARD_CELL_SIZE} animate-tile-appear`}
+            style={{ animationDelay: `${delay}ms` }}
+          >
+            <Tile tile={animating.tile} isHighlighted />
+          </div>
+        );
+      } else if (tile) {
         // Placed tile
         cells.push(
-          <div key={key} className="w-12 h-12">
+          <div key={key} className={BOARD_CELL_SIZE}>
             <Tile tile={tile} isHighlighted={isLastMove} />
           </div>
         );
       } else if (pending) {
         // Pending placement (ghost)
         cells.push(
-          <div key={key} className="w-12 h-12">
+          <div key={key} className={BOARD_CELL_SIZE}>
             <Tile tile={pending.tile} isGhost />
           </div>
         );
@@ -381,7 +418,7 @@ export function Board({
   const isEmpty = Object.keys(board).length === 0;
 
   return (
-    <div className="overflow-auto p-4 rounded-xl shadow-inner bg-gray-200">
+    <div className="rounded-xl shadow-inner bg-gray-200 p-4">
       {isEmpty && (
         <div className="text-center mb-2 text-blue-700 font-bold">
           Drop your first tile in the center!

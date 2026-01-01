@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { DndContext, DragOverlay } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { useGame } from './hooks/useGame';
+import type { GameMode } from './hooks/useGame';
 import { Board } from './components/Board';
 import { Hand } from './components/Hand';
 import { Sidebar } from './components/Sidebar';
@@ -21,6 +22,9 @@ function App() {
     hintMessage,
     hintPlacements,
     isAiVsAi,
+    gameMode,
+    animatingTiles,
+    isAnimating,
     startGame,
     dropTile,
     confirmPlay,
@@ -34,6 +38,9 @@ function App() {
 
   // Track which tile is being dragged
   const [draggingTile, setDraggingTile] = useState<TileData | undefined>(undefined);
+
+  // Track selected mode for start screen
+  const [selectedMode, setSelectedMode] = useState<GameMode>('beginner');
 
   // Calculate pending score preview
   const pendingScore = useMemo(() => {
@@ -74,13 +81,47 @@ function App() {
           <h1 className="text-4xl font-bold text-center text-gray-800 mb-2">
             Qwirkle
           </h1>
-          <p className="text-center text-gray-500 mb-8">
+          <p className="text-center text-gray-500 mb-6">
             Match shapes and colors to score points
           </p>
 
+          {/* Game Mode Selection */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Game Mode
+            </label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSelectedMode('beginner')}
+                className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
+                  selectedMode === 'beginner'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Beginner
+              </button>
+              <button
+                onClick={() => setSelectedMode('normal')}
+                className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
+                  selectedMode === 'normal'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Normal
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-gray-500">
+              {selectedMode === 'beginner'
+                ? 'Shows valid placements, hints available, score preview'
+                : 'No hints or placement guides - play like a pro'}
+            </p>
+          </div>
+
           <div className="space-y-4">
             <button
-              onClick={() => startGame(false)}
+              onClick={() => startGame(false, 'greedy', false, selectedMode)}
               disabled={isLoading}
               className="w-full py-3 px-6 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium text-lg transition-colors disabled:opacity-50"
             >
@@ -88,7 +129,7 @@ function App() {
             </button>
 
             <button
-              onClick={() => startGame(true, 'greedy')}
+              onClick={() => startGame(true, 'greedy', false, selectedMode)}
               disabled={isLoading}
               className="w-full py-3 px-6 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium text-lg transition-colors disabled:opacity-50"
             >
@@ -96,7 +137,7 @@ function App() {
             </button>
 
             <button
-              onClick={() => startGame(false, 'greedy', true)}
+              onClick={() => startGame(false, 'greedy', true, selectedMode)}
               disabled={isLoading}
               className="w-full py-3 px-6 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium text-lg transition-colors disabled:opacity-50"
             >
@@ -114,13 +155,14 @@ function App() {
     );
   }
 
-  // Game screen
+  // Game screen - Fixed viewport layout: only board scrolls
+  // Desktop optimized: minimum 1024px width
   return (
     <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="min-h-screen bg-gray-100">
-        {/* Header */}
-        <div className="bg-white shadow-sm px-4 py-3">
-          <div className="max-w-6xl mx-auto flex justify-between items-center">
+      <div className="h-screen flex flex-col bg-gray-100 overflow-hidden min-w-[1024px]">
+        {/* Header - Fixed at top */}
+        <div className="flex-shrink-0 bg-white shadow-sm px-4 py-3 z-10">
+          <div className="flex justify-between items-center">
             <h1 className="text-2xl font-bold text-gray-800">Qwirkle</h1>
             <button
               onClick={() => window.location.reload()}
@@ -131,10 +173,10 @@ function App() {
           </div>
         </div>
 
-        {/* Main content */}
-        <div className="max-w-6xl mx-auto p-4">
-          <div className="flex gap-4">
-            {/* Sidebar */}
+        {/* Main content - Fills remaining height */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Sidebar - Fixed width, scrolls internally if needed */}
+          <div className="flex-shrink-0 p-4 overflow-y-auto">
             <Sidebar
               scores={state.scores}
               currentPlayer={state.current_player}
@@ -144,15 +186,18 @@ function App() {
               isAiVsAi={isAiVsAi}
               isLoading={isLoading}
               canSwap={state.bag_remaining > 0}
+              gameMode={gameMode}
               onHint={getHint}
               onUndo={undo}
               onSwap={swapSelected}
             />
+          </div>
 
-            {/* Main area */}
-            <div className="flex-1 space-y-4">
-              {/* Message */}
-              {(state.message || hintMessage || error) && (
+          {/* Center area - Contains scrollable board and fixed bottom elements */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Message bar - Fixed above board */}
+            {(state.message || hintMessage || error) && (
+              <div className="flex-shrink-0 mx-4 mt-4">
                 <div
                   className={`
                     p-3 rounded-lg text-center font-medium
@@ -163,29 +208,34 @@ function App() {
                 >
                   {error || hintMessage || state.message}
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Board with Mini-map overlay */}
-              <div className="relative">
-                <Board
+            {/* Board area - Scrollable, takes remaining space */}
+            <div className="flex-1 overflow-auto p-4 relative">
+              <Board
+                board={state.board}
+                pendingPlacements={pendingPlacements}
+                lastMovePositions={state.last_move_positions}
+                draggingTile={draggingTile}
+                hintPositions={hintPlacements}
+                gameMode={gameMode}
+                animatingTiles={animatingTiles}
+              />
+
+              {/* Mini-map overlay - positioned within scrollable area */}
+              <div className="fixed top-20 right-4 opacity-90 hover:opacity-100 transition-opacity z-20">
+                <MiniMap
                   board={state.board}
                   pendingPlacements={pendingPlacements}
-                  lastMovePositions={state.last_move_positions}
-                  draggingTile={draggingTile}
-                  hintPositions={hintPlacements}
                 />
-
-                {/* Mini-map overlay */}
-                <div className="absolute top-2 right-2 opacity-90 hover:opacity-100 transition-opacity">
-                  <MiniMap
-                    board={state.board}
-                    pendingPlacements={pendingPlacements}
-                  />
-                </div>
               </div>
+            </div>
 
-              {/* Score Preview */}
-              {!state.game_over && !isAiVsAi && pendingPlacements.size > 0 && (
+            {/* Bottom controls area - Fixed at bottom */}
+            <div className="flex-shrink-0 px-4 pb-4 space-y-4">
+              {/* Score Preview - Only in beginner mode */}
+              {!state.game_over && !isAiVsAi && pendingPlacements.size > 0 && gameMode === 'beginner' && (
                 <div className="bg-white rounded-xl p-4 shadow-lg border-2 border-yellow-400">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -196,7 +246,7 @@ function App() {
                         </div>
                         {pendingScore.qwirkles > 0 && (
                           <div className="text-sm text-purple-600 font-medium">
-                            🌟 QWIRKLE! (+6 bonus)
+                            QWIRKLE! (+6 bonus)
                           </div>
                         )}
                       </div>
@@ -221,19 +271,39 @@ function App() {
                 </div>
               )}
 
+              {/* Simple confirm/cancel for Normal mode - no score preview */}
+              {!state.game_over && !isAiVsAi && pendingPlacements.size > 0 && gameMode === 'normal' && (
+                <div className="flex justify-center gap-4">
+                  <button
+                    onClick={confirmPlay}
+                    disabled={isLoading}
+                    className="py-3 px-8 bg-green-500 hover:bg-green-600 text-white rounded-lg font-bold text-lg transition-colors disabled:opacity-50"
+                  >
+                    Confirm ({pendingPlacements.size} tile{pendingPlacements.size > 1 ? 's' : ''})
+                  </button>
+                  <button
+                    onClick={cancelPlay}
+                    disabled={isLoading}
+                    className="py-3 px-6 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+
               {/* AI vs AI Controls */}
               {!state.game_over && isAiVsAi && (
                 <div className="flex justify-center gap-4">
                   <button
                     onClick={stepAi}
-                    disabled={isLoading}
+                    disabled={isLoading || isAnimating}
                     className="py-3 px-8 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium text-lg transition-colors disabled:opacity-50"
                   >
-                    {isLoading ? 'Thinking...' : 'Next Move'}
+                    {isAnimating ? 'Placing tiles...' : isLoading ? 'Thinking...' : 'Next Move'}
                   </button>
                   <button
                     onClick={undo}
-                    disabled={isLoading}
+                    disabled={isLoading || isAnimating}
                     className="py-3 px-6 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
                   >
                     Undo

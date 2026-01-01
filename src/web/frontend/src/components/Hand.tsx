@@ -9,15 +9,18 @@ interface HandProps {
   disabled?: boolean;
 }
 
+// Desktop-optimized hand slot size (matches lg tile size)
+const HAND_SLOT_SIZE = 'w-20 h-20';
+
 export function Hand({ tiles, usedIndices, disabled = false }: HandProps) {
   return (
-    <div className="bg-white rounded-xl p-4 shadow-lg border-2 border-blue-200">
+    <div className="bg-white rounded-xl p-6 shadow-lg border-2 border-blue-200">
       {/* Drag instruction */}
-      <div className="text-center mb-3 py-2 px-4 rounded-lg font-bold text-lg bg-blue-100 text-blue-700">
-        🎯 Drag a tile to the board
+      <div className="text-center mb-4 py-3 px-6 rounded-lg font-bold text-xl bg-blue-100 text-blue-700">
+        Drag a tile to the board
       </div>
 
-      <div className="flex gap-4 justify-center">
+      <div className="flex gap-6 justify-center">
         {tiles.map((tile, i) => {
           const index = i + 1; // 1-based
           const isUsed = usedIndices.has(index);
@@ -27,9 +30,9 @@ export function Hand({ tiles, usedIndices, disabled = false }: HandProps) {
             return (
               <div
                 key={i}
-                className="w-16 h-16 rounded-lg border-2 border-dashed border-blue-300 bg-blue-50 flex items-center justify-center"
+                className={`${HAND_SLOT_SIZE} rounded-lg border-2 border-dashed border-blue-300 bg-blue-50 flex items-center justify-center`}
               >
-                <span className="text-blue-400 text-xs">Placed</span>
+                <span className="text-blue-400 text-sm">Placed</span>
               </div>
             );
           }
@@ -52,7 +55,7 @@ export function Hand({ tiles, usedIndices, disabled = false }: HandProps) {
         {Array.from({ length: 6 - tiles.length }).map((_, i) => (
           <div
             key={`empty-${i}`}
-            className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50"
+            className={`${HAND_SLOT_SIZE} rounded-lg border-2 border-dashed border-gray-300 bg-gray-50`}
           />
         ))}
       </div>

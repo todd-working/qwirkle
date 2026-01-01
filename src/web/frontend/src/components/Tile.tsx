@@ -40,10 +40,11 @@ const ShapeSVG: Record<number, React.ReactNode> = {
   ),
 };
 
+// Desktop-optimized tile sizes
 const sizeClasses = {
-  sm: 'w-8 h-8',
-  md: 'w-12 h-12',
-  lg: 'w-16 h-16',
+  sm: 'w-10 h-10',   // Mini-map
+  md: 'w-14 h-14',   // Board tiles
+  lg: 'w-20 h-20',   // Hand tiles
 };
 
 // Pure display component (used in DragOverlay)
@@ -165,6 +166,9 @@ export function Tile({
   );
 }
 
+// Cell size class for board (matches md tiles)
+const CELL_SIZE = 'w-14 h-14';
+
 // Empty cell placeholder for board
 export function EmptyCell({
   isValidTarget = false,
@@ -180,7 +184,7 @@ export function EmptyCell({
     return (
       <div
         className={`
-          w-12 h-12 rounded-lg border-3 border-solid
+          ${CELL_SIZE} rounded-lg border-3 border-solid
           flex items-center justify-center
           cursor-pointer
           transition-all duration-150
@@ -197,7 +201,7 @@ export function EmptyCell({
     return (
       <div
         className={`
-          w-12 h-12 rounded-lg border-3 border-solid
+          ${CELL_SIZE} rounded-lg border-3 border-solid
           flex items-center justify-center
           cursor-pointer
           transition-all duration-150
@@ -214,9 +218,12 @@ export function EmptyCell({
 
   return (
     <div
-      className="w-12 h-12 rounded-lg border border-dashed border-gray-300 bg-gray-100"
+      className={`${CELL_SIZE} rounded-lg border border-dashed border-gray-300 bg-gray-100`}
     />
   );
 }
+
+// Export cell size for Board component
+export const BOARD_CELL_SIZE = CELL_SIZE;
 
 export default Tile;

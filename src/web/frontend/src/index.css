@@ -8,3 +8,24 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* AI tile placement animation */
+@keyframes tile-appear {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) translateY(-20px);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-tile-appear {
+  animation: tile-appear 0.3s ease-out forwards;
+  opacity: 0;
+}

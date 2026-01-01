@@ -1,5 +1,7 @@
 // Sidebar component - scores and controls
 
+type GameMode = 'beginner' | 'normal';
+
 interface SidebarProps {
   scores: number[];
   currentPlayer: number;
@@ -9,6 +11,7 @@ interface SidebarProps {
   isAiVsAi: boolean;
   isLoading: boolean;
   canSwap: boolean;
+  gameMode: GameMode;
   onHint: () => void;
   onUndo: () => void;
   onSwap: () => void;
@@ -23,10 +26,13 @@ export function Sidebar({
   isAiVsAi,
   isLoading,
   canSwap,
+  gameMode,
   onHint,
   onUndo,
   onSwap,
 }: SidebarProps) {
+  // Beginner mode shows hints
+  const showHint = gameMode === 'beginner';
   return (
     <div className="w-44 flex-shrink-0 space-y-4">
       {/* Scores */}
@@ -104,20 +110,23 @@ export function Sidebar({
             Actions
           </h3>
 
-          <button
-            onClick={onHint}
-            disabled={isLoading}
-            className="w-full py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 text-sm"
-          >
-            💡 Hint
-          </button>
+          {/* Hint button only in beginner mode */}
+          {showHint && (
+            <button
+              onClick={onHint}
+              disabled={isLoading}
+              className="w-full py-2 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 text-sm"
+            >
+              Hint
+            </button>
+          )}
 
           <button
             onClick={onUndo}
             disabled={isLoading}
             className="w-full py-2 px-4 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 text-sm"
           >
-            ↩️ Undo
+            Undo
           </button>
 
           <button
@@ -125,7 +134,7 @@ export function Sidebar({
             disabled={isLoading || !canSwap}
             className="w-full py-2 px-4 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 text-sm"
           >
-            🔄 Swap Tile
+            Swap Tile
           </button>
         </div>
       )}
