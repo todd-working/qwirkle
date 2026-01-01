@@ -9,7 +9,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -24,6 +24,19 @@ services:
       - "3005:80"
     depends_on:
       - backend
+
+# Go backend (alternative to Python)
+  backend-go:
+    build:
+      context: ./go
+      dockerfile: Dockerfile
+    container_name: qwirkle-backend-go
+    ports:
+      - "8000:8080"
+    volumes:
+      - ./src/web/frontend/dist:/app/static:ro
+    profiles:
+      - go
 
 # For development with hot reload
   backend-dev:
