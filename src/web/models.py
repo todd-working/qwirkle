@@ -32,6 +32,7 @@ class NewGameRequest(BaseModel):
     """Request to create a new game."""
     seed: Optional[int] = Field(None, description="RNG seed for reproducibility")
     vs_ai: bool = Field(False, description="Play against AI opponent")
+    ai_vs_ai: bool = Field(False, description="AI vs AI mode (watch mode)")
     ai_strategy: str = Field("greedy", description="AI strategy: 'greedy' or 'random'")
 
 

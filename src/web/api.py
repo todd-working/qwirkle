@@ -85,6 +85,7 @@ async def create_game(request: NewGameRequest):
     session = session_manager.create_game(
         seed=request.seed,
         vs_ai=request.vs_ai,
+        ai_vs_ai=request.ai_vs_ai,
         ai_strategy=request.ai_strategy
     )
 
@@ -257,6 +258,33 @@ async def get_valid_positions(game_id: str, request: ValidPositionsRequest):
     # Convert to response format
     return ValidPositionsResponse(
         positions=[[p[0], p[1]] for p in positions]
+    )
+
+
+@app.post("/api/game/{game_id}/ai-step", response_model=PlayResponse)
+async def ai_step(game_id: str):
+    """Execute one AI move (for AI vs AI mode)."""
+    session = session_manager.get_session(game_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    if session.state.game_over:
+        return PlayResponse(
+            success=False,
+            error="Game is over",
+            state=_session_to_state_response(session)
+        )
+
+    if not session.ai_vs_ai:
+        raise HTTPException(status_code=400, detail="Not in AI vs AI mode")
+
+    success, points, message = session_manager.play_ai_turn(session)
+
+    return PlayResponse(
+        success=success,
+        points=points if success else 0,
+        error=message if not success else None,
+        state=_session_to_state_response(session)
     )
 
 

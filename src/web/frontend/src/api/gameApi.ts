@@ -25,6 +25,7 @@ const api = axios.create({
 export interface NewGameOptions {
   seed?: number;
   vs_ai?: boolean;
+  ai_vs_ai?: boolean;
   ai_strategy?: 'greedy' | 'random';
 }
 
@@ -32,6 +33,7 @@ export async function createGame(options: NewGameOptions = {}): Promise<NewGameR
   const response = await api.post<NewGameResponse>('/game/new', {
     seed: options.seed,
     vs_ai: options.vs_ai ?? false,
+    ai_vs_ai: options.ai_vs_ai ?? false,
     ai_strategy: options.ai_strategy ?? 'greedy',
   });
   return response.data;
@@ -85,4 +87,9 @@ export async function getValidPositions(
 
 export async function deleteGame(gameId: string): Promise<void> {
   await api.delete(`/game/${gameId}`);
+}
+
+export async function aiStep(gameId: string): Promise<PlayResponse> {
+  const response = await api.post<PlayResponse>(`/game/${gameId}/ai-step`);
+  return response.data;
 }

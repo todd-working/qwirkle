@@ -25,6 +25,7 @@ class GameSession:
         last_move_positions: Positions from last move (for highlighting).
         message: Status message.
         vs_ai: Whether playing against AI.
+        ai_vs_ai: Whether both players are AI (watch mode).
         ai_strategy: AI strategy type.
     """
     game_id: str
@@ -33,6 +34,7 @@ class GameSession:
     last_move_positions: List[Position] = field(default_factory=list)
     message: str = ""
     vs_ai: bool = False
+    ai_vs_ai: bool = False
     ai_strategy: str = "greedy"
 
     MAX_UNDO_HISTORY = 50
@@ -62,6 +64,7 @@ class SessionManager:
         self,
         seed: Optional[int] = None,
         vs_ai: bool = False,
+        ai_vs_ai: bool = False,
         ai_strategy: str = "greedy"
     ) -> GameSession:
         """Create a new game session.
@@ -69,6 +72,7 @@ class SessionManager:
         Args:
             seed: Optional RNG seed.
             vs_ai: Whether player 2 is AI.
+            ai_vs_ai: Whether both players are AI (watch mode).
             ai_strategy: "greedy" or "random".
 
         Returns:
@@ -77,12 +81,18 @@ class SessionManager:
         game_id = str(uuid.uuid4())
         state = new_game(seed)
 
+        if ai_vs_ai:
+            message = "AI vs AI mode - click 'Next Move' to advance"
+        else:
+            message = "Welcome to Qwirkle! Player 1 goes first."
+
         session = GameSession(
             game_id=game_id,
             state=state,
             vs_ai=vs_ai,
+            ai_vs_ai=ai_vs_ai,
             ai_strategy=ai_strategy,
-            message="Welcome to Qwirkle! Player 1 goes first."
+            message=message
         )
 
         self._sessions[game_id] = session
@@ -219,8 +229,12 @@ class SessionManager:
         """
         return get_hint(session.state)
 
-    def play_ai_turn(self, session: GameSession) -> Tuple[bool, int, str]:
+    def play_ai_turn(self, session: GameSession, player: Optional[int] = None) -> Tuple[bool, int, str]:
         """Execute AI's turn.
+
+        Args:
+            session: The game session.
+            player: Which player's turn to play (None = current player in ai_vs_ai mode).
 
         Returns:
             Tuple of (success, points, message).
@@ -228,7 +242,10 @@ class SessionManager:
         if session.state.game_over:
             return False, 0, "Game is over"
 
-        if session.state.current_player != 1:
+        current = session.state.current_player
+
+        # In regular vs_ai mode, only player 1 is AI
+        if not session.ai_vs_ai and current != 1:
             return False, 0, "Not AI's turn"
 
         # Create solver based on strategy
@@ -238,18 +255,19 @@ class SessionManager:
             solver = GreedySolver()
 
         move = solver.get_move(session.state)
+        player_name = f"AI {current + 1}" if session.ai_vs_ai else "AI"
 
         if move is None:
             # No valid moves - swap a tile
-            hand = session.state.hands[1]
+            hand = session.state.hands[current]
             if not session.state.bag.is_empty() and len(hand) > 0:
                 session.save_state()
                 success, error = apply_swap(session.state, [hand.tiles()[0]])
                 if success:
                     session.last_move_positions = []
-                    session.message = "AI swapped a tile"
-                    return True, 0, "AI swapped a tile"
-            return False, 0, "AI has no valid moves"
+                    session.message = f"{player_name} swapped a tile"
+                    return True, 0, session.message
+            return False, 0, f"{player_name} has no valid moves"
 
         # Save state and apply move
         session.save_state()
@@ -257,12 +275,13 @@ class SessionManager:
 
         if success:
             session.last_move_positions = [p for p, _ in move.placements]
-            session.message = f"AI scored {points} points!"
+            session.message = f"{player_name} scored {points} points!"
 
             if session.state.game_over:
                 if session.state.winner is not None:
+                    winner_name = f"AI {session.state.winner + 1}" if session.ai_vs_ai else f"Player {session.state.winner + 1}"
                     session.message = (
-                        f"Game Over! Player {session.state.winner + 1} wins "
+                        f"Game Over! {winner_name} wins "
                         f"with {session.state.scores[session.state.winner]} points!"
                     )
                 else:
@@ -271,7 +290,7 @@ class SessionManager:
             return True, points, session.message
         else:
             session.history.pop()
-            return False, 0, f"AI move failed: {error}"
+            return False, 0, f"{player_name} move failed: {error}"
 
 
 # Global session manager instance

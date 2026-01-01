@@ -17,6 +17,7 @@ function App() {
     isLoading,
     error,
     hintMessage,
+    isAiVsAi,
     startGame,
     dropTile,
     confirmPlay,
@@ -24,6 +25,7 @@ function App() {
     swapSelected,
     undo,
     getHint,
+    stepAi,
   } = useGame();
 
   // Track which tile is being dragged
@@ -77,6 +79,14 @@ function App() {
               className="w-full py-3 px-6 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium text-lg transition-colors disabled:opacity-50"
             >
               {isLoading ? 'Starting...' : 'Play vs AI'}
+            </button>
+
+            <button
+              onClick={() => startGame(false, 'greedy', true)}
+              disabled={isLoading}
+              className="w-full py-3 px-6 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium text-lg transition-colors disabled:opacity-50"
+            >
+              {isLoading ? 'Starting...' : 'Watch AI vs AI'}
             </button>
           </div>
 
@@ -138,7 +148,7 @@ function App() {
           />
 
           {/* Controls */}
-          {!state.game_over && (
+          {!state.game_over && !isAiVsAi && (
             <GameControls
               hasPendingPlacements={pendingPlacements.size > 0}
               canUndo={true}
@@ -152,8 +162,28 @@ function App() {
             />
           )}
 
+          {/* AI vs AI Controls */}
+          {!state.game_over && isAiVsAi && (
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={stepAi}
+                disabled={isLoading}
+                className="py-3 px-8 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium text-lg transition-colors disabled:opacity-50"
+              >
+                {isLoading ? 'Thinking...' : 'Next Move'}
+              </button>
+              <button
+                onClick={undo}
+                disabled={isLoading}
+                className="py-3 px-6 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                Undo
+              </button>
+            </div>
+          )}
+
           {/* Hand */}
-          {!state.game_over && (
+          {!state.game_over && !isAiVsAi && (
             <Hand
               tiles={state.hand}
               usedIndices={new Set([...pendingPlacements.values()].map(p => p.index))}

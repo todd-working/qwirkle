@@ -19,9 +19,10 @@ interface UseGameReturn {
   isLoading: boolean;
   error: string | null;
   hintMessage: string | null;
+  isAiVsAi: boolean;
 
   // Actions
-  startGame: (vsAI?: boolean, aiStrategy?: 'greedy' | 'random') => Promise<void>;
+  startGame: (vsAI?: boolean, aiStrategy?: 'greedy' | 'random', aiVsAi?: boolean) => Promise<void>;
   selectTile: (index: number) => void;
   placeTile: (row: number, col: number) => void;
   dropTile: (tileIndex: number, row: number, col: number) => void;
@@ -30,6 +31,7 @@ interface UseGameReturn {
   swapSelected: () => Promise<void>;
   undo: () => Promise<void>;
   getHint: () => Promise<void>;
+  stepAi: () => Promise<void>;
 }
 
 export function useGame(): UseGameReturn {
@@ -41,19 +43,21 @@ export function useGame(): UseGameReturn {
   const [isLoading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hintMessage, setHintMessage] = useState<string | null>(null);
+  const [isAiVsAi, setIsAiVsAi] = useState(false);
 
   // Start a new game
-  const startGame = useCallback(async (vsAI = false, aiStrategy: 'greedy' | 'random' = 'greedy') => {
+  const startGame = useCallback(async (vsAI = false, aiStrategy: 'greedy' | 'random' = 'greedy', aiVsAi = false) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.createGame({ vs_ai: vsAI, ai_strategy: aiStrategy });
+      const response = await api.createGame({ vs_ai: vsAI, ai_strategy: aiStrategy, ai_vs_ai: aiVsAi });
       setGameId(response.game_id);
       setState(response.state);
       setPending(new Map());
       setSelected(undefined);
       setValidPositions(new Set());
       setHintMessage(null);
+      setIsAiVsAi(aiVsAi);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to start game');
     } finally {
@@ -242,6 +246,28 @@ export function useGame(): UseGameReturn {
     }
   }, [gameId]);
 
+  // Step AI (for AI vs AI mode)
+  const stepAi = useCallback(async () => {
+    if (!gameId) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await api.aiStep(gameId);
+
+      if (response.success && response.state) {
+        setState(response.state);
+      } else {
+        setError(response.error || 'AI move failed');
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to step AI');
+    } finally {
+      setLoading(false);
+    }
+  }, [gameId]);
+
   return {
     gameId,
     state,
@@ -251,6 +277,7 @@ export function useGame(): UseGameReturn {
     isLoading,
     error,
     hintMessage,
+    isAiVsAi,
     startGame,
     selectTile,
     placeTile,
@@ -260,6 +287,7 @@ export function useGame(): UseGameReturn {
     swapSelected,
     undo,
     getHint,
+    stepAi,
   };
 }
 
