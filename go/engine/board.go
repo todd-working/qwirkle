@@ -268,7 +268,10 @@ func (b *Board) GetNeighbors(pos Position) []struct {
 // We must manually copy the map contents because maps are reference types.
 // Just copying the Board struct would share the same underlying map.
 func (b *Board) Clone() *Board {
-	clone := NewBoard()
+	// Pre-size the map to avoid reallocations during copy
+	clone := &Board{
+		tiles: make(map[Position]Tile, len(b.tiles)),
+	}
 
 	// Copy each tile to the new board
 	// This creates new map entries, not references to the original

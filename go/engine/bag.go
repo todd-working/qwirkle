@@ -101,13 +101,9 @@ func (b *Bag) Draw(n int) []Tile {
 	// tiles[n:] creates a slice starting at index n
 	b.tiles = b.tiles[n:]
 
-	// Return a copy to prevent caller from modifying bag internals
-	// (Technically not needed here since we've already removed them,
-	// but it's good practice for API clarity)
-	result := make([]Tile, len(drawn))
-	copy(result, drawn)
-
-	return result
+	// Return drawn directly - no copy needed since we've released ownership
+	// (the tiles are no longer part of the bag's slice)
+	return drawn
 }
 
 // Return puts tiles back into the bag and reshuffles.

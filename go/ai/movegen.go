@@ -40,8 +40,8 @@ func GenerateAllMoves(game *engine.GameState) []engine.Move {
 	// Step 1: Find candidate positions (cached for all subsets)
 	candidates := getCandidatePositions(board, isFirst)
 
-	// Step 2: Get tiles from hand
-	tiles := hand.Tiles()
+	// Step 2: Get tiles from hand (use unsafe accessor to avoid copy)
+	tiles := hand.TilesUnsafe()
 	n := len(tiles)
 
 	// Step 3: Try larger subsets first (more likely to score high)
@@ -103,6 +103,8 @@ func GenerateAllMoves(game *engine.GameState) []engine.Move {
 //
 // A valid line requires: all same color (different shapes) OR all same shape (different colors)
 // Also: no duplicate tiles allowed
+//
+// OPTIMIZED: Uses fixed [36]bool array instead of map for duplicate checking (no allocation)
 func canFormValidLine(tiles []engine.Tile) bool {
 	if len(tiles) <= 1 {
 		return true
@@ -111,13 +113,15 @@ func canFormValidLine(tiles []engine.Tile) bool {
 		return false
 	}
 
-	// Check for duplicates
-	seen := make(map[engine.Tile]bool, len(tiles))
+	// Check for duplicates using fixed array (no allocation)
+	// 36 unique tiles: 6 shapes × 6 colors
+	var seen [36]bool
 	for _, t := range tiles {
-		if seen[t] {
+		idx := t.Index()
+		if seen[idx] {
 			return false
 		}
-		seen[t] = true
+		seen[idx] = true
 	}
 
 	// Check if all same color
@@ -444,7 +448,7 @@ func GenerateFastMove(game *engine.GameState) *engine.Move {
 	isFirst := board.IsEmpty()
 
 	candidates := getCandidatePositions(board, isFirst)
-	tiles := hand.Tiles()
+	tiles := hand.TilesUnsafe()
 
 	var bestMove *engine.Move
 	bestScore := -1

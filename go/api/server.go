@@ -13,6 +13,9 @@ import (
 	"github.com/todd-working/qwirkle/engine"
 )
 
+// Package-level singleton solver for simulations (avoids allocation per sim)
+var simSolver = &ai.GreedySolver{}
+
 // Server holds the HTTP server and game sessions.
 type Server struct {
 	sessions map[string]*Session
@@ -406,14 +409,11 @@ func (s *Server) runSimulationsParallel(game *engine.GameState, n int) (p0Wins, 
 
 // runSingleSimulation plays out one game and returns: 0=p0 win, 1=p1 win, 2=tie
 func (s *Server) runSingleSimulation(game *engine.GameState, simIdx int) int {
-	// Clone game state
-	simGame := game.Clone()
+	// Clone game state (lightweight - skips move history)
+	simGame := game.CloneForSimulation()
 	simGame.Bag = game.Bag.Clone(game.Seed + int64(simIdx) + 1)
 
-	// Use full greedy solver for accurate simulation
-	solver := &ai.GreedySolver{}
-
-	// Play out the game
+	// Play out the game using singleton solver
 	maxTurns := 100
 	turns := 0
 	for !simGame.GameOver && turns < maxTurns {
@@ -421,10 +421,11 @@ func (s *Server) runSingleSimulation(game *engine.GameState, simIdx int) int {
 
 		// Generate all moves and pick best (full greedy)
 		allMoves := ai.GenerateAllMoves(simGame)
-		move := solver.SelectMove(simGame, allMoves)
+		move := simSolver.SelectMove(simGame, allMoves)
 
 		if move != nil {
-			simGame.PlayTiles(move.Placements)
+			// Use prevalidated version - move already validated by GenerateAllMoves
+			simGame.PlayTilesPrevalidated(move.Placements, move.Score)
 		} else {
 			// No valid moves - swap if possible
 			if simGame.Bag.Remaining() > 0 && simGame.CurrentHand().Size() > 0 {

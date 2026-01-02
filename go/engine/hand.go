@@ -50,6 +50,13 @@ func (h *Hand) Tiles() []Tile {
 	return result
 }
 
+// TilesUnsafe returns direct access to the internal tiles slice.
+// WARNING: Do not modify the returned slice! For read-only use in hot paths
+// where allocation overhead of Tiles() is unacceptable.
+func (h *Hand) TilesUnsafe() []Tile {
+	return h.tiles
+}
+
 // Size returns the number of tiles in hand.
 func (h *Hand) Size() int {
 	return len(h.tiles)

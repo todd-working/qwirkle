@@ -178,6 +178,49 @@ func (g *GameState) PlayTiles(placements []Placement) int {
 	return score
 }
 
+// PlayTilesPrevalidated applies a pre-validated move with known score.
+// Use this in simulations where moves come from GenerateAllMoves (already validated).
+// Skips validation and score calculation for better performance.
+func (g *GameState) PlayTilesPrevalidated(placements []Placement, score int) {
+	// Apply placements to board
+	for _, p := range placements {
+		g.Board.Set(p.Pos, p.Tile)
+	}
+
+	// Add pre-computed score
+	g.Scores[g.CurrentPlayer] += score
+
+	// Remove played tiles from hand
+	hand := g.CurrentHand()
+	for _, p := range placements {
+		for i := 0; i < hand.Size(); i++ {
+			if t := hand.Get(i); t != nil && t.Equal(p.Tile) {
+				hand.Remove(i)
+				break
+			}
+		}
+	}
+
+	// Refill hand from bag
+	hand.Refill(g.Bag)
+
+	// Record move in history
+	g.MoveHistory = append(g.MoveHistory, MoveRecord{
+		Player:     g.CurrentPlayer,
+		Placements: placements,
+		Score:      score,
+		WasSwap:    false,
+	})
+
+	// Check for game over
+	g.checkGameOver()
+
+	// Switch to other player (if game continues)
+	if !g.GameOver {
+		g.CurrentPlayer = g.OtherPlayer()
+	}
+}
+
 // =============================================================================
 // SWAPPING TILES
 // =============================================================================
@@ -307,6 +350,22 @@ func (g *GameState) Clone() *GameState {
 	// don't need perfect bag simulation, just move validation
 
 	return clone
+}
+
+// CloneForSimulation creates a lightweight clone optimized for Monte Carlo simulations.
+// Skips MoveHistory to reduce allocation overhead. Use Clone() if you need history
+// for training or replay purposes.
+func (g *GameState) CloneForSimulation() *GameState {
+	return &GameState{
+		Board:         g.Board.Clone(),
+		Hands:         [2]*Hand{g.Hands[0].Clone(), g.Hands[1].Clone()},
+		Scores:        g.Scores,
+		CurrentPlayer: g.CurrentPlayer,
+		GameOver:      g.GameOver,
+		Winner:        g.Winner,
+		Seed:          g.Seed,
+		// MoveHistory intentionally nil - not needed for win probability
+	}
 }
 
 // =============================================================================

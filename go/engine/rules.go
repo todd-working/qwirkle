@@ -520,51 +520,74 @@ func ValidateMove(board *Board, placements []Placement, isFirstMove bool) bool {
 //
 // IMPORTANT: Call this AFTER placements are applied to the board.
 // The board should have the new tiles in place.
+//
+// OPTIMIZED: Avoids map allocation by understanding move structure:
+// - All placements are collinear (same row OR same column)
+// - Main line is scored once, perpendicular lines are all distinct
 func ScoreMove(board *Board, placements []Placement) int {
 	if len(placements) == 0 {
 		return 0
 	}
 
 	score := 0
+	var buf LineTiles
 
-	// Track which lines we've scored to avoid double-counting
-	// A line is identified by its direction and first tile position
-	scoredLines := make(map[string]bool)
+	// Single placement: check both directions
+	if len(placements) == 1 {
+		pos := placements[0].Pos
 
-	for _, p := range placements {
-		// Score horizontal line
-		hLine := GetHorizontalLine(board, p.Pos)
-		if len(hLine) > 1 {
-			// Create unique key for this line
-			// We use the first tile's position and direction
-			key := "h" + hLine[0].String()
-			if !scoredLines[key] {
-				scoredLines[key] = true
-				score += len(hLine)
-				// Qwirkle bonus!
-				if len(hLine) == 6 {
-					score += 6
-				}
+		GetHorizontalLineFast(board, pos, &buf)
+		if buf.Len() > 1 {
+			score += buf.Len()
+			if buf.Len() == 6 {
+				score += 6
 			}
 		}
 
-		// Score vertical line
-		vLine := GetVerticalLine(board, p.Pos)
-		if len(vLine) > 1 {
-			key := "v" + vLine[0].String()
-			if !scoredLines[key] {
-				scoredLines[key] = true
-				score += len(vLine)
-				if len(vLine) == 6 {
-					score += 6
-				}
+		GetVerticalLineFast(board, pos, &buf)
+		if buf.Len() > 1 {
+			score += buf.Len()
+			if buf.Len() == 6 {
+				score += 6
 			}
+		}
+
+		// Single tile with no neighbors scores 1
+		if score == 0 {
+			score = 1
+		}
+		return score
+	}
+
+	// Multiple placements: determine orientation
+	horizontal := placements[0].Pos.Row == placements[1].Pos.Row
+
+	// Score the main line (only once - all placements share it)
+	if horizontal {
+		GetHorizontalLineFast(board, placements[0].Pos, &buf)
+	} else {
+		GetVerticalLineFast(board, placements[0].Pos, &buf)
+	}
+	if buf.Len() > 1 {
+		score += buf.Len()
+		if buf.Len() == 6 {
+			score += 6
 		}
 	}
 
-	// Single tile with no line neighbors scores 1 point
-	if score == 0 && len(placements) == 1 {
-		score = 1
+	// Score perpendicular lines for each placement (all distinct)
+	for _, p := range placements {
+		if horizontal {
+			GetVerticalLineFast(board, p.Pos, &buf)
+		} else {
+			GetHorizontalLineFast(board, p.Pos, &buf)
+		}
+		if buf.Len() > 1 {
+			score += buf.Len()
+			if buf.Len() == 6 {
+				score += 6
+			}
+		}
 	}
 
 	return score
