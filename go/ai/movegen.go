@@ -15,61 +15,130 @@ import (
 )
 
 // =============================================================================
-// MOVE GENERATION
+// MOVE GENERATION (OPTIMIZED)
 // =============================================================================
 
 // GenerateAllMoves returns all valid moves for the current player.
 //
-// This is a brute-force search that:
-// 1. Finds all candidate positions (adjacent to existing tiles)
-// 2. Tries all subsets of tiles from hand
-// 3. Tries all permutations and orientations
-// 4. Validates each potential move
+// Optimizations applied:
+// 1. Pre-filter tile subsets that can't form valid lines
+// 2. Avoid board cloning - use place/score/remove pattern
+// 3. Skip duplicate permutations for identical tiles
+// 4. Cache candidate positions
+// 5. Early termination when finding a Qwirkle (12+ points)
 //
-// Returns moves sorted by score (highest first), which is useful for
-// greedy strategies and alpha-beta pruning.
-//
-// Time complexity: O(2^n * n! * p) where n=hand size (≤6), p=positions
-// In practice, much faster due to early pruning of invalid moves.
+// Returns moves sorted by score (highest first).
 func GenerateAllMoves(game *engine.GameState) []engine.Move {
 	hand := game.CurrentHand()
 	board := game.Board
 	isFirst := board.IsEmpty()
 
-	moves := make([]engine.Move, 0)
+	// Pre-allocate with reasonable capacity
+	moves := make([]engine.Move, 0, 64)
+	bestScore := 0
 
-	// Step 1: Find candidate positions
+	// Step 1: Find candidate positions (cached for all subsets)
 	candidates := getCandidatePositions(board, isFirst)
 
 	// Step 2: Get tiles from hand
 	tiles := hand.Tiles()
 	n := len(tiles)
 
-	// Step 3: Try all non-empty subsets of tiles
-	// Use bitmask to enumerate subsets: 1 to 2^n - 1
-	// Each bit represents whether a tile is included
-	for mask := 1; mask < (1 << n); mask++ {
-		// Build subset based on bitmask
-		subset := make([]engine.Tile, 0)
-		for i := 0; i < n; i++ {
-			// Check if bit i is set
-			if mask&(1<<i) != 0 {
-				subset = append(subset, tiles[i])
+	// Step 3: Try larger subsets first (more likely to score high)
+	// This helps early termination kick in sooner
+	for size := n; size >= 1; size-- {
+		// Generate all subsets of this size
+		for mask := 1; mask < (1 << n); mask++ {
+			// Count bits to check subset size
+			bits := 0
+			for m := mask; m > 0; m >>= 1 {
+				bits += int(m & 1)
+			}
+			if bits != size {
+				continue
+			}
+
+			// Build subset based on bitmask
+			subset := make([]engine.Tile, 0, 6)
+			for i := 0; i < n; i++ {
+				if mask&(1<<i) != 0 {
+					subset = append(subset, tiles[i])
+				}
+			}
+
+			// OPTIMIZATION: Skip subsets that can't possibly form a valid line
+			if len(subset) > 1 && !canFormValidLine(subset) {
+				continue
+			}
+
+			// Step 4: Try placing this subset
+			subsetMoves := generateMovesForTilesOptimized(board, subset, candidates, isFirst)
+			moves = append(moves, subsetMoves...)
+
+			// Track best score for early termination
+			for _, m := range subsetMoves {
+				if m.Score > bestScore {
+					bestScore = m.Score
+				}
 			}
 		}
 
-		// Step 4: Try placing this subset
-		subsetMoves := generateMovesForTiles(board, subset, candidates, isFirst)
-		moves = append(moves, subsetMoves...)
+		// EARLY TERMINATION: If we found a Qwirkle (12+ points), stop searching
+		// A Qwirkle is the maximum possible score for a single line
+		if bestScore >= 12 {
+			break
+		}
 	}
 
 	// Step 5: Sort by score (highest first)
-	// sort.Slice uses a custom comparator function
 	sort.Slice(moves, func(i, j int) bool {
 		return moves[i].Score > moves[j].Score
 	})
 
 	return moves
+}
+
+// canFormValidLine checks if a set of tiles could possibly form a valid Qwirkle line.
+// This is a quick pre-check to avoid expensive permutation enumeration.
+//
+// A valid line requires: all same color (different shapes) OR all same shape (different colors)
+// Also: no duplicate tiles allowed
+func canFormValidLine(tiles []engine.Tile) bool {
+	if len(tiles) <= 1 {
+		return true
+	}
+	if len(tiles) > 6 {
+		return false
+	}
+
+	// Check for duplicates
+	seen := make(map[engine.Tile]bool, len(tiles))
+	for _, t := range tiles {
+		if seen[t] {
+			return false
+		}
+		seen[t] = true
+	}
+
+	// Check if all same color
+	sameColor := true
+	for i := 1; i < len(tiles); i++ {
+		if tiles[i].Color != tiles[0].Color {
+			sameColor = false
+			break
+		}
+	}
+	if sameColor {
+		return true
+	}
+
+	// Check if all same shape
+	for i := 1; i < len(tiles); i++ {
+		if tiles[i].Shape != tiles[0].Shape {
+			return false
+		}
+	}
+	return true
 }
 
 // getCandidatePositions returns positions where tiles might be legally placed.
@@ -104,29 +173,27 @@ func getCandidatePositions(board *engine.Board, isFirst bool) []engine.Position 
 	return result
 }
 
-// generateMovesForTiles tries to place a specific set of tiles on the board.
-//
-// For single tiles: try each candidate position.
-// For multiple tiles: try horizontal and vertical line placements.
-func generateMovesForTiles(
+// generateMovesForTilesOptimized tries to place tiles without board cloning.
+// Uses place/score/remove pattern for efficiency.
+func generateMovesForTilesOptimized(
 	board *engine.Board,
 	tiles []engine.Tile,
 	candidates []engine.Position,
 	isFirst bool,
 ) []engine.Move {
-	moves := make([]engine.Move, 0)
+	moves := make([]engine.Move, 0, 16)
 
 	if len(tiles) == 1 {
 		// Single tile - try each candidate position
+		tile := tiles[0]
 		for _, pos := range candidates {
-			placements := []engine.Placement{{Pos: pos, Tile: tiles[0]}}
-
-			// Validate move
-			if engine.ValidateMove(board, placements, isFirst) {
-				// Calculate score (need to temporarily place tile)
-				testBoard := board.Clone()
-				testBoard.Set(pos, tiles[0])
-				score := engine.ScoreMove(testBoard, placements)
+			// Use fast validation (no board clone)
+			if engine.ValidateSingleTile(board, pos, tile) {
+				// Place, score, remove - no clone needed
+				board.Set(pos, tile)
+				placements := []engine.Placement{{Pos: pos, Tile: tile}}
+				score := engine.ScoreMove(board, placements)
+				board.Remove(pos)
 
 				moves = append(moves, engine.Move{
 					Placements: placements,
@@ -135,59 +202,47 @@ func generateMovesForTiles(
 			}
 		}
 	} else {
-		// Multiple tiles - must form a line
-		// Try both horizontal and vertical orientations
-		moves = append(moves, tryLinePlacements(board, tiles, candidates, isFirst, true)...)
-		moves = append(moves, tryLinePlacements(board, tiles, candidates, isFirst, false)...)
+		// Multiple tiles - try both orientations
+		moves = append(moves, tryLinePlacementsOptimized(board, tiles, candidates, isFirst, true)...)
+		moves = append(moves, tryLinePlacementsOptimized(board, tiles, candidates, isFirst, false)...)
 	}
 
 	return moves
 }
 
-// tryLinePlacements attempts to place tiles in a line from each candidate position.
-//
-// Parameters:
-//   - board: Current board state
-//   - tiles: Tiles to place (in any order)
-//   - candidates: Starting positions to try
-//   - isFirst: Is this the first move of the game?
-//   - horizontal: True for horizontal line, false for vertical
-//
-// We try all permutations of the tiles because order matters for validity.
-// A line [Red Circle, Blue Circle, Red Square] might be invalid, but
-// [Red Circle, Red Square, Blue Square] (reordered) might be valid.
-func tryLinePlacements(
+// tryLinePlacementsOptimized places tiles in a line without board cloning.
+// Uses place/score/remove pattern and skips duplicate permutations.
+func tryLinePlacementsOptimized(
 	board *engine.Board,
 	tiles []engine.Tile,
 	candidates []engine.Position,
 	isFirst bool,
 	horizontal bool,
 ) []engine.Move {
-	moves := make([]engine.Move, 0)
+	moves := make([]engine.Move, 0, 32)
 	n := len(tiles)
 
-	// Get all permutations of the tiles
-	// For 6 tiles, this is 720 permutations - manageable
-	permutations := permute(tiles)
+	// Get unique permutations (skip duplicates for identical tiles)
+	permutations := permuteUnique(tiles)
+
+	// Pre-allocate placement slice (reused across iterations)
+	placements := make([]engine.Placement, n)
 
 	for _, perm := range permutations {
 		// For each starting position
 		for _, start := range candidates {
 			// Build placements extending from start
-			placements := make([]engine.Placement, n)
 			valid := true
 
 			for i, tile := range perm {
 				var pos engine.Position
 				if horizontal {
-					// Extend rightward
 					pos = engine.Position{Row: start.Row, Col: start.Col + i}
 				} else {
-					// Extend downward
 					pos = engine.Position{Row: start.Row + i, Col: start.Col}
 				}
 
-				// Position must be empty on original board
+				// Position must be empty
 				if board.Has(pos) {
 					valid = false
 					break
@@ -196,24 +251,35 @@ func tryLinePlacements(
 				placements[i] = engine.Placement{Pos: pos, Tile: tile}
 			}
 
-			// Skip if any position was occupied
 			if !valid {
 				continue
 			}
 
-			// Validate the complete move
-			if engine.ValidateMove(board, placements, isFirst) {
-				// Calculate score
-				testBoard := board.Clone()
-				for _, p := range placements {
-					testBoard.Set(p.Pos, p.Tile)
-				}
-				score := engine.ScoreMove(testBoard, placements)
+			// Place all tiles temporarily
+			for _, p := range placements {
+				board.Set(p.Pos, p.Tile)
+			}
+
+			// Validate the formed lines
+			validMove := validateMultiTilePlacement(board, placements, isFirst)
+
+			if validMove {
+				// Score the move
+				score := engine.ScoreMove(board, placements)
+
+				// Make a copy of placements for the move
+				placementsCopy := make([]engine.Placement, n)
+				copy(placementsCopy, placements)
 
 				moves = append(moves, engine.Move{
-					Placements: placements,
+					Placements: placementsCopy,
 					Score:      score,
 				})
+			}
+
+			// Remove all tiles
+			for _, p := range placements {
+				board.Remove(p.Pos)
 			}
 		}
 	}
@@ -221,47 +287,119 @@ func tryLinePlacements(
 	return moves
 }
 
-// =============================================================================
-// PERMUTATION GENERATOR
-// =============================================================================
+// validateMultiTilePlacement validates a multi-tile placement without cloning.
+// Board should already have tiles placed. Uses zero-allocation line checks.
+func validateMultiTilePlacement(board *engine.Board, placements []engine.Placement, isFirst bool) bool {
+	if len(placements) == 0 {
+		return false
+	}
 
-// permute generates all permutations of a tile slice.
-//
-// Uses recursive Heap's algorithm approach.
-// For n elements, generates n! permutations.
-//
-// Example: [A, B] → [[A, B], [B, A]]
-//
-// Time complexity: O(n!) - unavoidable for generating all permutations.
-// Space complexity: O(n! * n) for storing all permutations.
-func permute(tiles []engine.Tile) [][]engine.Tile {
-	// Base case: single element or empty
-	if len(tiles) <= 1 {
-		// Return a copy to avoid modifying the original
-		result := make([]engine.Tile, len(tiles))
+	// For first move, one tile must be at origin
+	if isFirst {
+		hasOrigin := false
+		for _, p := range placements {
+			if p.Pos.Row == 0 && p.Pos.Col == 0 {
+				hasOrigin = true
+				break
+			}
+		}
+		if !hasOrigin {
+			return false
+		}
+	} else {
+		// Must connect to existing tiles (tiles not in this move)
+		// Use fixed array instead of map for small sets
+		connected := false
+		for _, p := range placements {
+			neighbors := p.Pos.Neighbors()
+			for _, neighbor := range neighbors {
+				if board.Has(neighbor) {
+					// Check if neighbor is in our placements
+					isOurs := false
+					for _, op := range placements {
+						if op.Pos == neighbor {
+							isOurs = true
+							break
+						}
+					}
+					if !isOurs {
+						connected = true
+						break
+					}
+				}
+			}
+			if connected {
+				break
+			}
+		}
+		if !connected {
+			return false
+		}
+	}
+
+	// Check all lines formed by the placements using fast functions
+	var hBuf, vBuf engine.LineTiles
+	for _, p := range placements {
+		engine.GetHorizontalLineFast(board, p.Pos, &hBuf)
+		if !engine.IsValidLineFast(&hBuf) {
+			return false
+		}
+		engine.GetVerticalLineFast(board, p.Pos, &vBuf)
+		if !engine.IsValidLineFast(&vBuf) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// permuteUnique generates permutations, skipping duplicates for identical tiles.
+// Uses numeric keys instead of strings for faster comparison.
+func permuteUnique(tiles []engine.Tile) [][]engine.Tile {
+	n := len(tiles)
+	if n <= 1 {
+		result := make([]engine.Tile, n)
 		copy(result, tiles)
 		return [][]engine.Tile{result}
 	}
 
-	result := make([][]engine.Tile, 0)
+	// Use uint64 key: each tile index (0-35) fits in 6 bits, so 6 tiles = 36 bits
+	seen := make(map[uint64]bool)
+	result := make([][]engine.Tile, 0, 24) // Pre-allocate for typical case
 
-	// For each tile, make it the first element and recurse on the rest
-	for i, tile := range tiles {
-		// Build "rest" slice without element i
-		rest := make([]engine.Tile, 0, len(tiles)-1)
-		rest = append(rest, tiles[:i]...)
-		rest = append(rest, tiles[i+1:]...)
+	// Use indices array to avoid slice allocations during recursion
+	indices := make([]int, n)
+	for i := range indices {
+		indices[i] = i
+	}
 
-		// Get permutations of the rest
-		for _, perm := range permute(rest) {
-			// Prepend current tile to each permutation
-			full := make([]engine.Tile, 0, len(tiles))
-			full = append(full, tile)
-			full = append(full, perm...)
-			result = append(result, full)
+	var generate func(depth int)
+	generate = func(depth int) {
+		if depth == n {
+			// Compute numeric key from current permutation
+			var key uint64
+			for i := 0; i < n; i++ {
+				key = key*36 + uint64(tiles[indices[i]].Index())
+			}
+			if !seen[key] {
+				seen[key] = true
+				perm := make([]engine.Tile, n)
+				for i := 0; i < n; i++ {
+					perm[i] = tiles[indices[i]]
+				}
+				result = append(result, perm)
+			}
+			return
+		}
+
+		for i := depth; i < n; i++ {
+			indices[depth], indices[i] = indices[i], indices[depth]
+			generate(depth + 1)
+			indices[depth], indices[i] = indices[i], indices[depth]
 		}
 	}
 
+	generate(0)
 	return result
 }
 
@@ -288,4 +426,47 @@ func TopNMoves(moves []engine.Move, n int) []engine.Move {
 		return moves
 	}
 	return moves[:n]
+}
+
+// =============================================================================
+// FAST MOVE GENERATION (for Monte Carlo simulations)
+// =============================================================================
+
+// GenerateFastMove finds the best single-tile move quickly.
+// Used for fast Monte Carlo simulations - greedy over single tiles only.
+//
+// Strategy: Evaluate all single-tile placements, return highest scoring.
+// This is O(n * p) where n=hand size, p=candidate positions.
+// Much faster than full move generation which is O(2^n * n! * p).
+func GenerateFastMove(game *engine.GameState) *engine.Move {
+	hand := game.CurrentHand()
+	board := game.Board
+	isFirst := board.IsEmpty()
+
+	candidates := getCandidatePositions(board, isFirst)
+	tiles := hand.Tiles()
+
+	var bestMove *engine.Move
+	bestScore := -1
+
+	// Find best single-tile placement (greedy over single tiles)
+	for _, tile := range tiles {
+		for _, pos := range candidates {
+			placements := []engine.Placement{{Pos: pos, Tile: tile}}
+
+			if engine.ValidateSingleTile(board, pos, tile) {
+				// Calculate score - place tile, score, remove
+				board.Set(pos, tile)
+				score := engine.ScoreMove(board, placements)
+				board.Remove(pos)
+
+				if score > bestScore {
+					bestScore = score
+					bestMove = &engine.Move{Placements: placements, Score: score}
+				}
+			}
+		}
+	}
+
+	return bestMove
 }

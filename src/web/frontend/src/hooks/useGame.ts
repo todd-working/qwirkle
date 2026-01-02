@@ -1,7 +1,7 @@
 // useGame hook - manages game state and API interactions
 
 import { useState, useCallback } from 'react';
-import type { GameState, TileData, Placement } from '../types/game';
+import type { GameState, TileData, Placement, WinProbabilityResponse } from '../types/game';
 import * as api from '../api/gameApi';
 
 interface PendingPlacement {
@@ -34,6 +34,8 @@ interface UseGameReturn {
   gameMode: GameMode;
   animatingTiles: AnimatingTile[];  // Tiles currently animating onto board
   isAnimating: boolean;
+  winProbability: WinProbabilityResponse | null;
+  isLoadingWinProb: boolean;
 
   // Actions
   startGame: (vsAI?: boolean, aiStrategy?: 'greedy' | 'random', aiVsAi?: boolean, mode?: GameMode) => Promise<void>;
@@ -47,6 +49,7 @@ interface UseGameReturn {
   getHint: () => Promise<void>;
   clearHint: () => void;
   stepAi: () => Promise<void>;
+  fetchWinProbability: () => Promise<void>;
 }
 
 export function useGame(): UseGameReturn {
@@ -64,6 +67,8 @@ export function useGame(): UseGameReturn {
   const [gameMode, setGameMode] = useState<GameMode>('beginner');
   const [animatingTiles, setAnimatingTiles] = useState<AnimatingTile[]>([]);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [winProbability, setWinProbability] = useState<WinProbabilityResponse | null>(null);
+  const [isLoadingWinProb, setIsLoadingWinProb] = useState(false);
 
   // Start a new game
   const startGame = useCallback(async (
@@ -76,9 +81,11 @@ export function useGame(): UseGameReturn {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.createGame({ vs_ai: vsAI, ai_strategy: aiStrategy, ai_vs_ai: aiVsAi });
-      setGameId(response.game_id);
-      setState(response.state);
+      // Backend returns the game state directly (not wrapped in { state: ... })
+      const gameState = await api.createGame({ vs_ai: vsAI, ai_strategy: aiStrategy, ai_vs_ai: aiVsAi });
+      console.log('Game created:', gameState);
+      setGameId(gameState.game_id);
+      setState(gameState);
       setPending(new Map());
       setSelected(undefined);
       setValidPositions(new Set());
@@ -86,8 +93,10 @@ export function useGame(): UseGameReturn {
       setIsAiVsAi(aiVsAi);
       setVsAi(vsAI);
       setGameMode(mode);
+      setWinProbability(null);
       console.log('Game started, vsAi set to:', vsAI);
     } catch (e) {
+      console.error('Failed to start game:', e);
       setError(e instanceof Error ? e.message : 'Failed to start game');
     } finally {
       setLoading(false);
@@ -348,6 +357,21 @@ export function useGame(): UseGameReturn {
     setHintPlacements([]);
   }, []);
 
+  // Fetch win probability
+  const fetchWinProbability = useCallback(async () => {
+    if (!gameId) return;
+
+    setIsLoadingWinProb(true);
+    try {
+      const prob = await api.getWinProbability(gameId);
+      setWinProbability(prob);
+    } catch {
+      setWinProbability(null);
+    } finally {
+      setIsLoadingWinProb(false);
+    }
+  }, [gameId]);
+
   // Step AI (for AI vs AI mode) - with animation
   const stepAi = useCallback(async () => {
     if (!gameId || !state) return;
@@ -397,6 +421,8 @@ export function useGame(): UseGameReturn {
     gameMode,
     animatingTiles,
     isAnimating,
+    winProbability,
+    isLoadingWinProb,
     startGame,
     selectTile,
     placeTile,
@@ -408,6 +434,7 @@ export function useGame(): UseGameReturn {
     getHint,
     clearHint,
     stepAi,
+    fetchWinProbability,
   };
 }
 

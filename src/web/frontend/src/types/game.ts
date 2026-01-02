@@ -32,10 +32,8 @@ export interface GameState {
   message: string;
 }
 
-export interface NewGameResponse {
-  game_id: string;
-  state: GameState;
-}
+// NewGameResponse is the same as GameState - backend returns state directly
+export type NewGameResponse = GameState;
 
 export interface PlayResponse {
   success: boolean;
@@ -68,6 +66,14 @@ export interface HintResponse {
 
 export interface ValidPositionsResponse {
   positions: number[][];  // [[row, col], ...]
+}
+
+export interface WinProbabilityResponse {
+  p0_prob: number;
+  p1_prob: number;
+  tie_prob: number;
+  n_simulations: number;
+  confidence: number;
 }
 
 // Shape names for display

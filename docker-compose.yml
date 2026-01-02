@@ -1,20 +1,22 @@
 services:
+  # Go backend (default)
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile.backend
+      context: ./go
+      dockerfile: Dockerfile
     container_name: qwirkle-backend
     ports:
-      - "8000:8000"
-    environment:
-      - PYTHONUNBUFFERED=1
+      - "8000:8080"
+    volumes:
+      - ./src/web/frontend/dist:/app/static:ro
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 5s
 
+  # Frontend production build
   frontend:
     build:
       context: ./src/web/frontend
@@ -25,33 +27,7 @@ services:
     depends_on:
       - backend
 
-# Go backend (alternative to Python)
-  backend-go:
-    build:
-      context: ./go
-      dockerfile: Dockerfile
-    container_name: qwirkle-backend-go
-    ports:
-      - "8000:8080"
-    volumes:
-      - ./src/web/frontend/dist:/app/static:ro
-    profiles:
-      - go
-
-# For development with hot reload
-  backend-dev:
-    build:
-      context: .
-      dockerfile: Dockerfile.backend
-    container_name: qwirkle-backend-dev
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./src:/app/src:ro
-    command: uvicorn src.web.api:app --host 0.0.0.0 --port 8000 --reload
-    profiles:
-      - dev
-
+  # Frontend dev with hot reload
   frontend-dev:
     image: node:20-alpine
     container_name: qwirkle-frontend-dev
@@ -61,8 +37,10 @@ services:
     volumes:
       - ./src/web/frontend:/app
       - /app/node_modules
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      - DOCKER_ENV=true
     depends_on:
-      - backend-dev
+      - backend
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     profiles:
       - dev

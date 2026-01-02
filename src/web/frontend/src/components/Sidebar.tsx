@@ -1,5 +1,7 @@
 // Sidebar component - scores and controls
 
+import type { WinProbabilityResponse } from '../types/game';
+
 type GameMode = 'beginner' | 'normal';
 
 interface SidebarProps {
@@ -12,9 +14,12 @@ interface SidebarProps {
   isLoading: boolean;
   canSwap: boolean;
   gameMode: GameMode;
+  winProbability: WinProbabilityResponse | null;
+  isLoadingWinProb: boolean;
   onHint: () => void;
   onUndo: () => void;
   onSwap: () => void;
+  onWinProb: () => void;
 }
 
 export function Sidebar({
@@ -27,9 +32,12 @@ export function Sidebar({
   isLoading,
   canSwap,
   gameMode,
+  winProbability,
+  isLoadingWinProb,
   onHint,
   onUndo,
   onSwap,
+  onWinProb,
 }: SidebarProps) {
   // Beginner mode shows hints
   const showHint = gameMode === 'beginner';
@@ -102,6 +110,65 @@ export function Sidebar({
           />
         </div>
       </div>
+
+      {/* Win Probability */}
+      {!gameOver && (
+        <div className="bg-white rounded-xl shadow-md p-4">
+          <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-3">
+            Win Chance
+          </h3>
+          {isLoadingWinProb ? (
+            <div className="flex flex-col items-center py-4">
+              <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs text-gray-500 mt-2">Simulating...</span>
+            </div>
+          ) : winProbability ? (
+            <div className="space-y-2">
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-gray-600">{isAiVsAi ? 'AI 1' : 'Player 1'}</span>
+                  <span className="font-bold text-blue-600">
+                    {Math.round(winProbability.p0_prob * 100)}%
+                  </span>
+                </div>
+                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 transition-all"
+                    style={{ width: `${winProbability.p0_prob * 100}%` }}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-gray-600">{isAiVsAi ? 'AI 2' : 'Player 2'}</span>
+                  <span className="font-bold text-purple-600">
+                    {Math.round(winProbability.p1_prob * 100)}%
+                  </span>
+                </div>
+                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-purple-500 transition-all"
+                    style={{ width: `${winProbability.p1_prob * 100}%` }}
+                  />
+                </div>
+              </div>
+              <button
+                onClick={onWinProb}
+                className="w-full py-1 px-2 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+              >
+                Refresh
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onWinProb}
+              className="w-full py-2 px-4 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-medium transition-colors text-sm"
+            >
+              Calculate
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Controls */}
       {!gameOver && !isAiVsAi && (

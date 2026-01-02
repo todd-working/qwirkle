@@ -9,6 +9,7 @@ import type {
   UndoResponse,
   HintResponse,
   ValidPositionsResponse,
+  WinProbabilityResponse,
   Placement,
 } from '../types/game';
 
@@ -91,5 +92,10 @@ export async function deleteGame(gameId: string): Promise<void> {
 
 export async function aiStep(gameId: string): Promise<PlayResponse> {
   const response = await api.post<PlayResponse>(`/game/${gameId}/ai-step`);
+  return response.data;
+}
+
+export async function getWinProbability(gameId: string): Promise<WinProbabilityResponse> {
+  const response = await api.get<WinProbabilityResponse>(`/game/${gameId}/win-probability`);
   return response.data;
 }

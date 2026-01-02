@@ -8,7 +8,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        // Use Docker service name when running in container, localhost for local dev
+        target: process.env.DOCKER_ENV ? 'http://backend:8080' : 'http://localhost:8000',
         changeOrigin: true,
       },
     },

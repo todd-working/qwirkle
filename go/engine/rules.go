@@ -113,6 +113,155 @@ func GetVerticalLine(board *Board, pos Position) []Tile {
 }
 
 // =============================================================================
+// OPTIMIZED LINE EXTRACTION (zero allocation)
+// =============================================================================
+
+// LineTiles is a fixed-size buffer for line extraction (max 6 tiles + 1 center).
+// Using a fixed array avoids heap allocations in hot paths.
+type LineTiles struct {
+	tiles [7]Tile
+	count int
+}
+
+// Len returns the number of tiles in the line.
+func (lt *LineTiles) Len() int {
+	return lt.count
+}
+
+// Slice returns a slice view of the tiles (no allocation).
+func (lt *LineTiles) Slice() []Tile {
+	return lt.tiles[:lt.count]
+}
+
+// GetHorizontalLineFast extracts horizontal line into provided buffer.
+// Returns the number of tiles found. No heap allocation.
+func GetHorizontalLineFast(board *Board, pos Position, buf *LineTiles) {
+	buf.count = 0
+
+	// Scan left - count tiles
+	leftCount := 0
+	for c := pos.Col - 1; ; c-- {
+		if board.Get(Position{Row: pos.Row, Col: c}) != nil {
+			leftCount++
+		} else {
+			break
+		}
+	}
+
+	// Add left tiles in correct order
+	for i := 0; i < leftCount && buf.count < 7; i++ {
+		c := pos.Col - leftCount + i
+		t := board.Get(Position{Row: pos.Row, Col: c})
+		buf.tiles[buf.count] = *t
+		buf.count++
+	}
+
+	// Add center tile
+	if buf.count < 7 {
+		if t := board.Get(pos); t != nil {
+			buf.tiles[buf.count] = *t
+			buf.count++
+		}
+	}
+
+	// Scan right
+	for c := pos.Col + 1; buf.count < 7; c++ {
+		if t := board.Get(Position{Row: pos.Row, Col: c}); t != nil {
+			buf.tiles[buf.count] = *t
+			buf.count++
+		} else {
+			break
+		}
+	}
+}
+
+// GetVerticalLineFast extracts vertical line into provided buffer.
+// Returns the number of tiles found. No heap allocation.
+func GetVerticalLineFast(board *Board, pos Position, buf *LineTiles) {
+	buf.count = 0
+
+	// Scan up - count tiles
+	upCount := 0
+	for r := pos.Row - 1; ; r-- {
+		if board.Get(Position{Row: r, Col: pos.Col}) != nil {
+			upCount++
+		} else {
+			break
+		}
+	}
+
+	// Add up tiles in correct order
+	for i := 0; i < upCount && buf.count < 7; i++ {
+		r := pos.Row - upCount + i
+		t := board.Get(Position{Row: r, Col: pos.Col})
+		buf.tiles[buf.count] = *t
+		buf.count++
+	}
+
+	// Add center tile
+	if buf.count < 7 {
+		if t := board.Get(pos); t != nil {
+			buf.tiles[buf.count] = *t
+			buf.count++
+		}
+	}
+
+	// Scan down
+	for r := pos.Row + 1; buf.count < 7; r++ {
+		if t := board.Get(Position{Row: r, Col: pos.Col}); t != nil {
+			buf.tiles[buf.count] = *t
+			buf.count++
+		} else {
+			break
+		}
+	}
+}
+
+// IsValidLineFast checks line validity using the LineTiles buffer.
+func IsValidLineFast(lt *LineTiles) bool {
+	if lt.count <= 1 {
+		return true
+	}
+	if lt.count > 6 {
+		return false
+	}
+
+	tiles := lt.tiles[:lt.count]
+
+	// Check for duplicates using fixed array
+	var seen [36]bool
+	for _, t := range tiles {
+		idx := t.Index()
+		if seen[idx] {
+			return false
+		}
+		seen[idx] = true
+	}
+
+	// Check same color
+	firstColor := tiles[0].Color
+	sameColor := true
+	for i := 1; i < lt.count; i++ {
+		if tiles[i].Color != firstColor {
+			sameColor = false
+			break
+		}
+	}
+	if sameColor {
+		return true
+	}
+
+	// Check same shape
+	firstShape := tiles[0].Shape
+	for i := 1; i < lt.count; i++ {
+		if tiles[i].Shape != firstShape {
+			return false
+		}
+	}
+	return true
+}
+
+// =============================================================================
 // LINE VALIDATION
 // =============================================================================
 
@@ -124,11 +273,7 @@ func GetVerticalLine(board *Board, pos Position) []Tile {
 // 3. No duplicate tiles (same shape AND color)
 // 4. Maximum 6 tiles (one of each in the shared attribute)
 //
-// Examples:
-//   - [Red Circle, Red Square, Red Star] - Valid (same color, different shapes)
-//   - [Red Circle, Blue Circle, Green Circle] - Valid (same shape, different colors)
-//   - [Red Circle, Blue Square] - Invalid (neither same color nor same shape)
-//   - [Red Circle, Red Circle] - Invalid (duplicate)
+// OPTIMIZED: Uses fixed-size array instead of map for duplicate checking.
 func IsValidLine(tiles []Tile) bool {
 	// Empty or single tile is always valid
 	if len(tiles) <= 1 {
@@ -140,37 +285,39 @@ func IsValidLine(tiles []Tile) bool {
 		return false
 	}
 
-	// Check for duplicates using a map as a set
-	// In Go, map[T]bool with value true is a common set pattern
-	seen := make(map[Tile]bool)
+	// Check for duplicates using fixed array (no allocation)
+	// 36 unique tiles: 6 shapes × 6 colors
+	var seen [36]bool
 	for _, t := range tiles {
-		if seen[t] {
+		idx := t.Index()
+		if seen[idx] {
 			return false // Duplicate found
 		}
-		seen[t] = true
+		seen[idx] = true
 	}
 
 	// Check if all same color
 	sameColor := true
+	firstColor := tiles[0].Color
 	for i := 1; i < len(tiles); i++ {
-		if tiles[i].Color != tiles[0].Color {
+		if tiles[i].Color != firstColor {
 			sameColor = false
 			break
 		}
 	}
 
-	// Check if all same shape
-	sameShape := true
-	for i := 1; i < len(tiles); i++ {
-		if tiles[i].Shape != tiles[0].Shape {
-			sameShape = false
-			break
-		}
+	if sameColor {
+		return true
 	}
 
-	// Must be one or the other (if same color AND same shape with no dupes,
-	// that's only possible with a single tile, which we handled above)
-	return sameColor || sameShape
+	// Check if all same shape
+	firstShape := tiles[0].Shape
+	for i := 1; i < len(tiles); i++ {
+		if tiles[i].Shape != firstShape {
+			return false
+		}
+	}
+	return true
 }
 
 // =============================================================================
@@ -227,6 +374,41 @@ func ValidatePlacement(board *Board, pos Position, tile Tile, isFirstMove bool) 
 	return true
 }
 
+// ValidateSingleTile is a fast path for validating single-tile placements.
+// Avoids board cloning and heap allocations. Optimized for Monte Carlo.
+func ValidateSingleTile(board *Board, pos Position, tile Tile) bool {
+	// Position must be empty
+	if board.Has(pos) {
+		return false
+	}
+
+	// First tile must go at origin
+	if board.IsEmpty() {
+		return pos.Row == 0 && pos.Col == 0
+	}
+
+	// Must connect to existing tiles
+	if !board.HasNeighbor(pos) {
+		return false
+	}
+
+	// Check lines using zero-allocation buffers
+	board.Set(pos, tile)
+
+	var hBuf, vBuf LineTiles
+	GetHorizontalLineFast(board, pos, &hBuf)
+	if !IsValidLineFast(&hBuf) {
+		board.Remove(pos)
+		return false
+	}
+
+	GetVerticalLineFast(board, pos, &vBuf)
+	valid := IsValidLineFast(&vBuf)
+
+	board.Remove(pos)
+	return valid
+}
+
 // ValidateMove checks if a complete move (multiple placements) is valid.
 //
 // Move validity rules:
@@ -235,6 +417,10 @@ func ValidatePlacement(board *Board, pos Position, tile Tile, isFirstMove bool) 
 // 3. Tiles must form a contiguous line (can fill gaps between existing tiles)
 // 4. Each individual placement must be valid
 func ValidateMove(board *Board, placements []Placement, isFirstMove bool) bool {
+	// Fast path for single tile placement
+	if len(placements) == 1 {
+		return ValidateSingleTile(board, placements[0].Pos, placements[0].Tile)
+	}
 	if len(placements) == 0 {
 		return false
 	}

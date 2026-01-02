@@ -131,6 +131,13 @@ func (t Tile) String() string {
 	return t.Color.String() + " " + t.Shape.String()
 }
 
+// Index returns a unique index 0-35 for this tile.
+// Used for fast duplicate checking with fixed-size arrays instead of maps.
+// Formula: shape * 6 + color (6 shapes × 6 colors = 36 unique tiles)
+func (t Tile) Index() int {
+	return int(t.Shape)*6 + int(t.Color)
+}
+
 // =============================================================================
 // TILE GENERATION
 // =============================================================================

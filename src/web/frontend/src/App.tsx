@@ -25,6 +25,8 @@ function App() {
     gameMode,
     animatingTiles,
     isAnimating,
+    winProbability,
+    isLoadingWinProb,
     startGame,
     dropTile,
     confirmPlay,
@@ -34,6 +36,7 @@ function App() {
     getHint,
     clearHint,
     stepAi,
+    fetchWinProbability,
   } = useGame();
 
   // Track which tile is being dragged
@@ -187,9 +190,12 @@ function App() {
               isLoading={isLoading}
               canSwap={state.bag_remaining > 0}
               gameMode={gameMode}
+              winProbability={winProbability}
+              isLoadingWinProb={isLoadingWinProb}
               onHint={getHint}
               onUndo={undo}
               onSwap={swapSelected}
+              onWinProb={fetchWinProbability}
             />
           </div>
 
