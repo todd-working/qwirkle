@@ -31,9 +31,12 @@ interface BoardProps {
 // Get board bounds with padding for drop zones
 function getBounds(
   board: BoardData,
-  pending: Map<string, PendingPlacement>
+  pending: Map<string, PendingPlacement>,
+  animating: AnimatingTile[] = []
 ): { minRow: number; maxRow: number; minCol: number; maxCol: number } {
-  const keys = [...Object.keys(board), ...pending.keys()];
+  // Include animating tile positions in bounds calculation
+  const animatingKeys = animating.map(t => `${t.row},${t.col}`);
+  const keys = [...Object.keys(board), ...pending.keys(), ...animatingKeys];
 
   if (keys.length === 0) {
     // Empty board - show small area around origin
@@ -323,8 +326,8 @@ export function Board({
 
   // Memoize expensive calculations
   const bounds = useMemo(
-    () => getBounds(board, pendingPlacements),
-    [board, pendingPlacements]
+    () => getBounds(board, pendingPlacements, animatingTiles),
+    [board, pendingPlacements, animatingTiles]
   );
 
   const lastMoveSet = useMemo(

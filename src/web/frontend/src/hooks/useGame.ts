@@ -60,6 +60,7 @@ export function useGame(): UseGameReturn {
   const [hintMessage, setHintMessage] = useState<string | null>(null);
   const [hintPlacements, setHintPlacements] = useState<Placement[]>([]);
   const [isAiVsAi, setIsAiVsAi] = useState(false);
+  const [vsAi, setVsAi] = useState(false);  // Human vs AI mode
   const [gameMode, setGameMode] = useState<GameMode>('beginner');
   const [animatingTiles, setAnimatingTiles] = useState<AnimatingTile[]>([]);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -71,6 +72,7 @@ export function useGame(): UseGameReturn {
     aiVsAi = false,
     mode: GameMode = 'beginner'
   ) => {
+    console.log('startGame called with vsAI:', vsAI, 'aiVsAi:', aiVsAi, 'mode:', mode);
     setLoading(true);
     setError(null);
     try {
@@ -82,7 +84,9 @@ export function useGame(): UseGameReturn {
       setValidPositions(new Set());
       setHintMessage(null);
       setIsAiVsAi(aiVsAi);
+      setVsAi(vsAI);
       setGameMode(mode);
+      console.log('Game started, vsAi set to:', vsAI);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to start game');
     } finally {
@@ -160,13 +164,59 @@ export function useGame(): UseGameReturn {
     setValidPositions(new Set());
   }, [state]);
 
+  // Helper to animate tiles onto board
+  const animateTiles = useCallback((
+    newState: GameState,
+    onComplete: () => void
+  ) => {
+    const lastMovePositions = newState.last_move_positions;
+
+    console.log('animateTiles called, positions:', lastMovePositions);
+    console.log('board keys:', Object.keys(newState.board));
+
+    if (lastMovePositions && lastMovePositions.length > 0) {
+      const tilesToAnimate: AnimatingTile[] = lastMovePositions.map((pos) => {
+        // pos is [row, col] array
+        const row = pos[0];
+        const col = pos[1];
+        const key = `${row},${col}`;
+        const tile = newState.board[key];
+        console.log(`Position ${key}, tile:`, tile);
+        return { row, col, tile };
+      }).filter(t => t.tile);
+
+      console.log('tilesToAnimate:', tilesToAnimate);
+
+      if (tilesToAnimate.length > 0) {
+        setIsAnimating(true);
+        setAnimatingTiles(tilesToAnimate);
+
+        const animationDuration = 600;
+        const staggerDelay = 400;
+        const totalDuration = animationDuration + (tilesToAnimate.length - 1) * staggerDelay;
+
+        setTimeout(() => {
+          setAnimatingTiles([]);
+          setIsAnimating(false);
+          onComplete();
+        }, totalDuration);
+
+        return true; // Animation started
+      }
+    }
+
+    return false; // No animation
+  }, []);
+
   // Confirm pending placements
   const confirmPlay = useCallback(async () => {
+    console.log('confirmPlay called, vsAi:', vsAi, 'gameId:', gameId);
     if (!gameId || pendingPlacements.size === 0) return;
 
     setLoading(true);
     setError(null);
     setHintMessage(null);
+    setPending(new Map()); // Clear pending immediately for visual feedback
 
     try {
       const placements: Placement[] = [];
@@ -176,19 +226,36 @@ export function useGame(): UseGameReturn {
       }
 
       const response = await api.playTiles(gameId, placements);
+      console.log('playTiles response:', response);
 
       if (response.success && response.state) {
-        setState(response.state);
-        setPending(new Map());
+        const newState = response.state;
+        console.log('newState.game_over:', newState.game_over, 'last_move_positions:', newState.last_move_positions);
+
+        // If vs AI, animate the AI's response tiles
+        // The backend auto-plays AI after human, so last_move_positions = AI's move
+        if (vsAi && !newState.game_over) {
+          console.log('Attempting to animate AI tiles');
+          const animated = animateTiles(newState, () => {
+            setState(newState);
+            setLoading(false);
+          });
+
+          if (animated) return; // Don't set loading false yet
+        }
+
+        setState(newState);
       } else {
         setError(response.error || 'Invalid move');
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to play');
     } finally {
-      setLoading(false);
+      if (!isAnimating) {
+        setLoading(false);
+      }
     }
-  }, [gameId, pendingPlacements]);
+  }, [gameId, pendingPlacements, vsAi, animateTiles, isAnimating]);
 
   // Cancel pending placements
   const cancelPlay = useCallback(() => {
@@ -293,37 +360,14 @@ export function useGame(): UseGameReturn {
 
       if (response.success && response.state) {
         const newState = response.state;
-        const lastMovePositions = newState.last_move_positions;
 
-        // If AI placed tiles, animate them
-        if (lastMovePositions && lastMovePositions.length > 0) {
-          // Get the tiles at those positions from the new board
-          const tilesToAnimate: AnimatingTile[] = lastMovePositions.map(([row, col]) => {
-            const key = `${row},${col}`;
-            const tile = newState.board[key];
-            return { row, col, tile };
-          }).filter(t => t.tile); // Filter out any missing tiles
+        // Animate the AI's tiles
+        const animated = animateTiles(newState, () => {
+          setState(newState);
+          setLoading(false);
+        });
 
-          if (tilesToAnimate.length > 0) {
-            setIsAnimating(true);
-            setAnimatingTiles(tilesToAnimate);
-
-            // Animate tiles sequentially, then update state
-            const animationDuration = 600; // ms per tile (matches CSS)
-            const staggerDelay = 400; // ms between tiles
-            const totalDuration = animationDuration + (tilesToAnimate.length - 1) * staggerDelay;
-
-            // After animation completes, update the state
-            setTimeout(() => {
-              setAnimatingTiles([]);
-              setIsAnimating(false);
-              setState(newState);
-              setLoading(false);
-            }, totalDuration);
-
-            return; // Don't setLoading(false) yet
-          }
-        }
+        if (animated) return; // Don't set loading false yet
 
         // No animation needed, just update state
         setState(newState);
@@ -337,7 +381,7 @@ export function useGame(): UseGameReturn {
         setLoading(false);
       }
     }
-  }, [gameId, state, isAnimating]);
+  }, [gameId, state, animateTiles, isAnimating]);
 
   return {
     gameId,

@@ -253,7 +253,10 @@ function App() {
                     </div>
                     <div className="flex gap-2">
                       <button
-                        onClick={confirmPlay}
+                        onClick={() => {
+                          console.log('Confirm button clicked (beginner mode)');
+                          confirmPlay();
+                        }}
                         disabled={isLoading}
                         className="py-2 px-6 bg-green-500 hover:bg-green-600 text-white rounded-lg font-bold transition-colors disabled:opacity-50"
                       >
@@ -275,7 +278,10 @@ function App() {
               {!state.game_over && !isAiVsAi && pendingPlacements.size > 0 && gameMode === 'normal' && (
                 <div className="flex justify-center gap-4">
                   <button
-                    onClick={confirmPlay}
+                    onClick={() => {
+                      console.log('Confirm button clicked (normal mode)');
+                      confirmPlay();
+                    }}
                     disabled={isLoading}
                     className="py-3 px-8 bg-green-500 hover:bg-green-600 text-white rounded-lg font-bold text-lg transition-colors disabled:opacity-50"
                   >
